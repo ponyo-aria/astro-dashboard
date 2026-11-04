@@ -105,6 +105,40 @@ button {
   font-size: 15px;
   font-weight: bold;
   margin-bottom: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* 判定結果の色分け（◎=緑, △=黄, ×=赤, 参考=薄い緑/赤, その他=グレー） */
+.judgment-go {
+  background: #d7f5df;
+  color: #146c2e;
+}
+
+.judgment-split {
+  background: #fff3cd;
+  color: #8a6400;
+}
+
+.judgment-no-go {
+  background: #fde0e0;
+  color: #9b2226;
+}
+
+.judgment-reference-go {
+  background: #eaf5ea;
+  color: #3a7a4e;
+}
+
+.judgment-reference-no-go {
+  background: #f6e9e9;
+  color: #8a4a4a;
+}
+
+.judgment-neutral {
+  background: #eee;
+  color: #666;
 }
 
 .nights-row-detail {
@@ -112,20 +146,3 @@ button {
   line-height: 1.6;
 }
 
-.forecast-table-section {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
-  margin-top: 12px;
-}
-
-.forecast-mini-table {
-  max-height: 160px;
-  overflow-y: auto;
-  font-size: 12px;
-  background: #fafafa;
-  border: 1px solid #eee;
-  padding: 4px;
-  margin-bottom: 8px;
-}
