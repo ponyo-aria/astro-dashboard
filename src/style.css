@@ -229,3 +229,24 @@ button {
   margin: 4px 0 8px;
 }
 
+.compare-section {
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: center;
+}
+
