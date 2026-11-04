@@ -75,3 +75,33 @@ button {
   flex-direction: column;
   gap: 8px;
 }
+
+.nights-section {
+  margin-top: 16px;
+}
+
+.nights-table {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.nights-row {
+  flex: 0 0 auto;
+  width: 220px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.nights-row-date {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.nights-row-detail {
+  font-size: 13px;
+  line-height: 1.6;
+}

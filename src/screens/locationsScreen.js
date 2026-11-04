@@ -18,7 +18,7 @@ const SHORT_URL_MESSAGE =
 const INVALID_MESSAGE =
   '座標を読み取れませんでした。「35.42, 138.58」の形式、またはGoogleマップの長いURLを貼ってください'
 
-export function renderLocationsScreen(container) {
+export function renderLocationsScreen(container, { onChange } = {}) {
   let locations = loadLocations()
   // 編集中の地点ID（nullなら新規追加フォームを閉じている状態）
   let editingId = null
@@ -27,6 +27,7 @@ export function renderLocationsScreen(container) {
 
   function persist() {
     saveLocations(locations)
+    onChange?.()
   }
 
   function openAddForm() {
