@@ -25,3 +25,12 @@
 - GitHub Pages は無料プランではPrivateリポジトリで使えないことが判明したため、Publicリポジトリに変更して対応（ソースコードは公開されるが、秘密情報・個人情報は含めない方針を徹底）
 - `gh-pages` パッケージで `npm run deploy` → `gh-pages` ブランチに公開
 - GitHub Pages の設定（Branch: `gh-pages`、フォルダ: `/`）はオーナーが画面操作
+
+## Step 1：地点管理
+
+- 要確認の結果：
+  - Open-Meteo Elevation API（`https://api.open-meteo.com/v1/elevation?latitude=..&longitude=..`）で標高を取得できることを確認。カンマ区切りで複数地点をまとめて取得できる（例：`latitude=35.1,36.2&longitude=138.1,139.2` → `{"elevation":[847.0, 1337.0]}`）
+  - 短縮URL（`maps.app.goo.gl` など）は、ブラウザ上のJavaScriptからはリダイレクト先を読み取れない（CORSの制約）。仕様書どおり、専用のエラーメッセージ「座標をコピーして貼ってください」を表示する形にした
+- 初期3地点の座標は、オーナーにGoogleマップのピン長押しで取得してもらった3地点ともピンポイントの座標を使用。座標の数値そのものは `src/storage/locationsStorage.js` に保存し、このファイルを含め報告書には住所を書かない
+- 作ったもの：地点の追加・編集・削除・並べ替え、座標／GoogleマップURLの貼り付け入力、標高の自動取得（手で修正可）、localStorageへの保存、JSONの書き出し・読み込み（置き換え／追加）
+- 自動テスト：座標解析、保存ロジック（追加・更新・削除・並べ替え・JSON書き出し読み込み）、画面の基本操作（追加・削除・不正入力時のエラー表示）
