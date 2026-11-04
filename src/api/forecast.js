@@ -2,7 +2,7 @@
 //
 // 要確認（Step 3）の結果：
 // 1. モデル名パラメータ：MSMは `jma_msm`（エンドポイント /v1/jma）、
-//    ECMWFは `ecmwf_ifs`（9km解像度の最新IFS、エンドポイント /v1/ecmwf）
+//    ECMWFは `ecmwf_ifs025`（0.25度格子・約25km解像度、エンドポイント /v1/ecmwf）
 // 2. MSMでも850hPaの風（wind_speed_850hPa / wind_direction_850hPa）は取得できる
 // 3. 複数地点は緯度・経度をカンマ区切りで渡せば1回のリクエストでまとめて取得できる
 // 4. モデルの最終更新時刻は `https://api.open-meteo.com/data/{モデル名}/static/meta.json` で取得できる
@@ -12,6 +12,11 @@
 //
 // 注意：MSM（jma_msm）では wind_gusts_10m（最大瞬間風速）は常にnullになる（モデルが対応していない）。
 // 画面側で「データなし」として扱う。
+//
+// 注意（Step 6で判明）：ECMWFには解像度違いで複数モデルがあり、最新の9km高解像度版
+// `ecmwf_ifs` は850hPa気圧面の風（wind_speed_850hPa / wind_direction_850hPa）が
+// 常にnullだった。850hPa風を使う850hPa風向き矢印機能のため、気圧面データが取れる
+// `ecmwf_ifs025`（0.25度格子）に変更した。
 
 import { getSurroundingPoints } from '../logic/geo.js'
 import { config } from '../config.js'
@@ -20,7 +25,7 @@ export const MODELS = {
   msm: { endpointPath: 'jma', modelParam: 'jma_msm', forecastDays: 4 },
   // 7夜目（D+6日の夜）は日の出がD+7日の朝になるため、forecast_daysは7ではなく8にして
   // 7夜目の朝まで予報データが届くようにする
-  ecmwf: { endpointPath: 'ecmwf', modelParam: 'ecmwf_ifs', forecastDays: 8 },
+  ecmwf: { endpointPath: 'ecmwf', modelParam: 'ecmwf_ifs025', forecastDays: 8 },
 }
 
 const HOURLY_VARS = [

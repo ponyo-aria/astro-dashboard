@@ -143,7 +143,7 @@ export function computeNightJudgment(location, nightDate, cache) {
   return { info, judgment }
 }
 
-export async function renderTopScreen(container, locations) {
+export async function renderTopScreen(container, locations, { onCardClick } = {}) {
   const state = {
     loading: false,
     errorMessage: null,
@@ -258,11 +258,14 @@ export async function renderTopScreen(container, locations) {
 
       // 日付は基準地点ブロックに1回だけ表示し、横スクロールが連動するのでここでは繰り返さない
       const row = document.createElement('div')
-      row.className = 'nights-row'
+      row.className = 'nights-row nights-row-clickable'
       row.innerHTML = `
         <div class="nights-row-judgment ${STATUS_CLASSES[judgment.status]}">${STATUS_LABELS[judgment.status]}${judgment.lowCloudRisk ? ' ⚠' : ''}</div>
         <div class="nights-row-detail">撮影可能時間：${clearHoursOf(judgment)}</div>
       `
+      if (onCardClick) {
+        row.addEventListener('click', () => onCardClick(location, nightDate))
+      }
       table.appendChild(row)
     }
 
