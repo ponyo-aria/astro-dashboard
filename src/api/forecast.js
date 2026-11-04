@@ -18,7 +18,9 @@ import { config } from '../config.js'
 
 export const MODELS = {
   msm: { endpointPath: 'jma', modelParam: 'jma_msm', forecastDays: 4 },
-  ecmwf: { endpointPath: 'ecmwf', modelParam: 'ecmwf_ifs', forecastDays: 7 },
+  // 7夜目（D+6日の夜）は日の出がD+7日の朝になるため、forecast_daysは7ではなく8にして
+  // 7夜目の朝まで予報データが届くようにする
+  ecmwf: { endpointPath: 'ecmwf', modelParam: 'ecmwf_ifs', forecastDays: 8 },
 }
 
 const HOURLY_VARS = [

@@ -101,6 +101,12 @@ button {
   margin-bottom: 6px;
 }
 
+.nights-row-judgment {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
 .nights-row-detail {
   font-size: 13px;
   line-height: 1.6;

@@ -16,8 +16,10 @@ function refreshNights() {
   renderNightsScreen(nightsContainer, loadLocations())
 }
 
-function refreshForecast() {
-  renderForecastScreen(forecastContainer, loadLocations())
+async function refreshForecast() {
+  await renderForecastScreen(forecastContainer, loadLocations())
+  // 予報データが揃ったら、判定（◎△×）を反映するために7夜一覧を描き直す
+  refreshNights()
 }
 
 // 地点管理画面で地点が変わったら、暗い時間・予報の一覧も再計算する

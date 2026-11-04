@@ -1,15 +1,27 @@
-// 選んだ1地点の「今後7夜の暗い時間」を表示する画面（Step 2：判定はまだ行わない）。
+// 選んだ1地点の「今後7夜」を表示する画面。
 //
 // 複数地点の表示はStep 5（トップ画面）で作る。それまでは地点ごとの差が
 // 近場だとほぼ無いため、動作確認用に1地点だけ選んで表示する。
 // 将来的にはスマホのGPSから自動選択に置き換える想定（オーナーと合意済み）。
 
 import { createObserver, computeNightInfo } from '../logic/astronomy.js'
+import { judgeNight, checkLowCloudRisk } from '../logic/judgment.js'
+import { loadForecastCache } from '../storage/forecastCache.js'
 
 const NIGHT_COUNT = 7
 const TIME_ZONE = 'Asia/Tokyo'
 const SELECTED_LOCATION_KEY = 'astro-dashboard.selectedLocationId.v1'
 const DEFAULT_LOCATION_NAME = '八ヶ岳ふれあい公園' // 野辺山
+
+const STATUS_LABELS = {
+  go: '◎ 可',
+  split: '△ 割れ',
+  no_go: '× 不可',
+  reference_go: '参考：可',
+  reference_no_go: '参考：不可',
+  no_dark_time: '暗い時間なし',
+  no_data: 'データなし',
+}
 
 function addDays(date, days) {
   const next = new Date(date)
@@ -62,6 +74,10 @@ function getSelectedLocation(locations) {
   return saved ?? pickDefaultLocation(locations)
 }
 
+function findForecastForLocation(cache, modelKey, locationId) {
+  return cache?.results?.[modelKey]?.find((r) => r.locationId === locationId)
+}
+
 function renderNightsTable(location) {
   const section = document.createElement('div')
   section.className = 'nights-section'
@@ -72,19 +88,42 @@ function renderNightsTable(location) {
   const observer = createObserver(location.lat, location.lng, location.elevation ?? 0)
   const today = new Date()
 
+  const cache = loadForecastCache()
+  const msmForecast = findForecastForLocation(cache, 'msm', location.id)
+  const ecmwfForecast = findForecastForLocation(cache, 'ecmwf', location.id)
+
   for (let i = 0; i < NIGHT_COUNT; i += 1) {
     const nightDate = noonOf(addDays(today, i))
     const info = computeNightInfo(observer, nightDate)
+
+    let judgment = { status: 'no_data', lowCloudRisk: false }
+    if (msmForecast || ecmwfForecast) {
+      const lowCloudRisk = ecmwfForecast
+        ? checkLowCloudRisk(
+            [ecmwfForecast.north, ecmwfForecast.east, ecmwfForecast.south, ecmwfForecast.west].map(
+              (p) => p?.hourly
+            ),
+            info.darkIntervals
+          )
+        : false
+      judgment = judgeNight({
+        nightInfo: info,
+        msmHourly: msmForecast?.center?.hourly,
+        ecmwfHourly: ecmwfForecast?.center?.hourly,
+        lowCloudRisk,
+      })
+    }
 
     const row = document.createElement('div')
     row.className = 'nights-row'
     row.innerHTML = `
       <div class="nights-row-date">${formatDate(nightDate)}</div>
+      <div class="nights-row-judgment">${STATUS_LABELS[judgment.status]}${judgment.lowCloudRisk ? ' ⚠' : ''}</div>
       <div class="nights-row-detail">
         日没 ${formatTime(info.sunset)} → 日の出 ${formatTime(info.sunrise)}<br>
         薄明終了 ${formatTime(info.duskEnd)} 〜 薄明開始 ${formatTime(info.dawnStart)}<br>
         月齢 ${info.moonAgeDays.toFixed(1)}<br>
-        <strong>暗い時間：${formatHours(info.darkHours)}</strong>
+        暗い時間：${formatHours(info.darkHours)}
       </div>
     `
     table.appendChild(row)
@@ -98,7 +137,7 @@ export function renderNightsScreen(container, locations) {
   container.innerHTML = ''
 
   const heading = document.createElement('h2')
-  heading.textContent = '今後7夜の暗い時間'
+  heading.textContent = '今後7夜'
   container.appendChild(heading)
 
   if (locations.length === 0) {
