@@ -10,9 +10,9 @@
 /* global self, caches, fetch */
 
 // 保存するファイルの一覧（index.html・JS・CSS・アイコンなど）
-const PRECACHE_FILES = ["apple-touch-icon-180x180.png","assets/index-Bv_BqkRv.css","assets/index-RRllDqCK.js","favicon.ico","icon.svg","index.html","manifest.webmanifest","maskable-icon-512x512.png","pwa-192x192.png","pwa-512x512.png","pwa-64x64.png"]
+const PRECACHE_FILES = ["apple-touch-icon-180x180.png","assets/index-CeZYqJiB.css","assets/index-Dh5le2Q6.js","favicon.ico","icon.svg","index.html","manifest.webmanifest","maskable-icon-512x512.png","pwa-192x192.png","pwa-512x512.png","pwa-64x64.png"]
 // 中身が変わるたびに変わる番号。新しい版を公開すると、保存場所ごと入れ替わる
-const CACHE_NAME = 'astro-dashboard-' + "7c525f743832"
+const CACHE_NAME = 'astro-dashboard-' + "473b02c70f56"
 
 // インストール時：アプリ本体のファイルをまとめて保存する
 self.addEventListener('install', (event) => {
