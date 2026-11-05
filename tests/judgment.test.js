@@ -31,11 +31,11 @@ function makeHourly(startHourJst, cloudPattern) {
   return { time, cloud_cover_low, cloud_cover_mid, cloud_cover_high }
 }
 
-const CLEAR = { low: 10, mid: 10, high: 10 }
+const CLEAR = { low: 0, mid: 3, high: 5 } // 全層5%以下＝晴れ
 const CLOUDY = { low: 80, mid: 80, high: 80 }
 
 describe('computeClearDarkHours（撮影可能時間）', () => {
-  it('全層20%以下が4時間続く → 4時間（撮影可）', () => {
+  it('全層5%以下が4時間続く → 4時間（撮影可）', () => {
     const hourly = makeHourly(18, [CLEAR, CLEAR, CLEAR, CLEAR])
     const hours = computeClearDarkHours(hourly, DARK_INTERVALS)
     expect(hours).toBe(4)
@@ -48,7 +48,13 @@ describe('computeClearDarkHours（撮影可能時間）', () => {
   })
 
   it('中層雲だけ40% → 晴れではない（0時間）', () => {
-    const hourly = makeHourly(18, [{ low: 10, mid: 40, high: 10 }])
+    const hourly = makeHourly(18, [{ low: 0, mid: 40, high: 0 }])
+    const hours = computeClearDarkHours(hourly, DARK_INTERVALS)
+    expect(hours).toBe(0)
+  })
+
+  it('高層の薄雲だけ10% → 晴れではない（薄雲も不可。晴れは全層5%以下）', () => {
+    const hourly = makeHourly(18, [{ low: 0, mid: 0, high: 10 }])
     const hours = computeClearDarkHours(hourly, DARK_INTERVALS)
     expect(hours).toBe(0)
   })

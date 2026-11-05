@@ -1,7 +1,7 @@
 // トップ画面・モデル比較画面で共通して使う、「地点・夜ごとの総合判定」のまとめ役。
 
 import { createObserver, computeNightInfo } from './astronomy.js'
-import { judgeNight, checkLowCloudRisk } from './judgment.js'
+import { judgeNight, checkLowCloudRisk, isForecastCoveringNight } from './judgment.js'
 
 export const NIGHT_COUNT = 7
 
@@ -42,9 +42,17 @@ export function computeNightJudgment(location, nightDate, cache) {
     return { info, judgment: { status: 'no_data', lowCloudRisk: false } }
   }
 
-  const lowCloudRisk = ecmwfForecast
+  // 低層雲リスクは周辺4点（5km先）で判断する。
+  // MSM（約5km四方のマス）の予報がその夜の終わりまで届いていればMSMを使う。
+  // ECMWF（約25km四方のマス）だと周辺4点がほとんど中心と同じマスに入ってしまうため、
+  // MSMが届かない5〜7夜目だけECMWFを使う（2026-11-05 オーナー判断で変更）。
+  const riskForecast =
+    msmForecast && isForecastCoveringNight(msmForecast.center?.hourly, info.dawnStart)
+      ? msmForecast
+      : ecmwfForecast
+  const lowCloudRisk = riskForecast
     ? checkLowCloudRisk(
-        [ecmwfForecast.north, ecmwfForecast.east, ecmwfForecast.south, ecmwfForecast.west].map(
+        [riskForecast.north, riskForecast.east, riskForecast.south, riskForecast.west].map(
           (p) => p?.hourly
         ),
         info.darkIntervals

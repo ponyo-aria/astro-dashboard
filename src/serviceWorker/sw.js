@@ -19,7 +19,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_FILES))
+      // cache: 'reload' ＝ ブラウザが覚えている古いファイルを使わず、必ずサーバーから取り直す。
+      // （GitHub Pages は「10分間は使い回してよい」という設定で配るため、これが無いと
+      //   公開から10分以内に開いたとき、新しい版のつもりで古いファイルを保存してしまう）
+      .then((cache) =>
+        cache.addAll(PRECACHE_FILES.map((file) => new Request(file, { cache: 'reload' })))
+      )
       // 新しい版は待たずにすぐ使い始める（次に開いたときに新しい版になる）
       .then(() => self.skipWaiting())
   )

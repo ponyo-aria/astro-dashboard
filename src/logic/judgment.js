@@ -33,7 +33,7 @@ export function isForecastCoveringNight(hourly, dawnStart) {
 }
 
 /**
- * 暗い時間帯のうち、晴れ（全層20%以下）が連続している最長時間（撮影可能時間）を求める。
+ * 暗い時間帯のうち、晴れ（全層が config.cloudCoverClearMax 以下）が連続している最長時間（撮影可能時間）を求める。
  * 1時間ごとのデータなので、その1時間の中央時刻が暗い時間帯に入っているかで判定する。
  */
 export function computeClearDarkHours(hourly, darkIntervals) {

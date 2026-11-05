@@ -1,9 +1,23 @@
-// 地点詳細画面：夜間の時間別グラフと数値情報を表示する。
+// 地点詳細画面：1地点・1夜ぶんの詳しい情報。ホーム画面と同じ部品・同じ見た目で、
+// スクロールせずに1画面（Galaxy S24）に収まるように並べる。
+//
+//   ・上：戻る／地点名と日付（‹ › で前の夜・次の夜へ）／モデル切り替え（MSM・ECMWF）
+//   ・要点カード：判定とモデルごとの撮影可能時間、暗い時間・月・日没・天文薄明
+//   ・1時間ごとの表：空の状態・高層／中層／低層の雲・風速・月の高さ（ホームの表と同じ時刻・同じマス）
+//   ・数値の情報（3列×2段）：降水量・最低気温・結露・風・雲が流れてくる方向・周辺5kmの低層雲
 
 import { Chart } from 'chart.js/auto'
 import annotationPlugin from 'chartjs-plugin-annotation'
+import { config } from '../config.js'
 import { createObserver, computeNightInfo, getMoonAltitude } from '../logic/astronomy.js'
+import {
+  STATUS_CLASSES,
+  computeNightJudgment,
+  findForecastForLocation,
+} from '../logic/nightJudgment.js'
 import { judgeModelForNight } from '../logic/judgment.js'
+import { ALL_MODELS, MODEL_INFO, isReferenceModel } from '../logic/modelInfo.js'
+import { matrixSlots, cloudAt, windAt } from '../logic/nightMatrix.js'
 import {
   sumPrecipitation,
   minNightTemperature,
@@ -12,198 +26,301 @@ import {
   representativeWindDirection850,
   directionLabel,
   surroundingLowCloudSummary,
-  cloudCellColor,
 } from '../logic/detailStats.js'
+import { hourLabelCell, skyCell, cloudCell } from './hourCells.js'
+import { moonPhaseSvg } from './moonPhaseIcon.js'
+import {
+  el,
+  jstParts,
+  formatTime,
+  formatHours,
+  formatNightTitle,
+  judgmentText,
+} from './format.js'
 
 Chart.register(annotationPlugin)
 
-const TIME_ZONE = 'Asia/Tokyo'
-const MODEL_LABELS = { msm: 'MSM', ecmwf: 'ECMWF' }
-
 const DEW_POINT_LABELS = { high: '高', caution: '注意', low: '低' }
+const HOUR_MS = 60 * 60 * 1000
 
-function parseLocalTime(timeString) {
-  return new Date(`${timeString}:00+09:00`)
-}
+// 雲は実際の空と同じように、上から高層・中層・低層の順に並べる
+const CLOUD_LAYERS = [
+  { key: 'high', label: '高層' },
+  { key: 'mid', label: '中層' },
+  { key: 'low', label: '低層' },
+]
 
-function formatDate(date) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: TIME_ZONE,
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-  }).format(date)
-}
-
-function formatHourLabel(timeString) {
-  const date = parseLocalTime(timeString)
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-function formatTime(date) {
-  if (!date) return '―'
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(date))
-}
-
-function closestIndex(times, target) {
-  if (!target) return null
-  let best = 0
-  let bestDiff = Infinity
-  times.forEach((t, i) => {
-    const diff = Math.abs(parseLocalTime(t).getTime() - target.getTime())
-    if (diff < bestDiff) {
-      bestDiff = diff
-      best = i
-    }
-  })
-  return best
-}
-
-function findForecast(cache, modelKey, locationId) {
-  return cache?.results?.[modelKey]?.find((r) => r.locationId === locationId)
-}
-
-export function renderDetailScreen(container, { location, nightDate, cache, onBack }) {
+/**
+ * nightDates：前の夜・次の夜に移るための、7夜ぶんの日付の一覧（ホーム画面と同じもの）
+ * initialModel：最初に表示するモデル（'msm' / 'ecmwf'。省略時は自動）
+ * locations：上の地点名から切り替えられる地点の一覧（登録地点）
+ * onLocationChange(location)：地点を切り替えたときに呼ばれる
+ * onNightChange(index, nightDate)：前の夜・次の夜に移ったときに呼ばれる
+ */
+export function renderDetailScreen(
+  container,
+  {
+    location: initialLocation,
+    locations = [initialLocation],
+    nightDate,
+    nightDates = [nightDate],
+    initialModel = null,
+    cache,
+    onBack,
+    onNightChange,
+    onLocationChange,
+  }
+) {
+  // 表示している地点（上の地点名から切り替えられる）
+  let location = initialLocation
   let chartInstance = null
 
-  function pickInitialModel() {
-    const msmForecast = findForecast(cache, 'msm', location.id)
-    if (msmForecast) return 'msm'
-    return 'ecmwf'
+  const state = {
+    // 表示するモデル。null のときは、その夜にMSMの予報が届いていればMSM、なければECMWFを自動で選ぶ
+    // （比較画面でMSM・ECMWFのマスを押して開いたときは、そのモデルで開く）
+    selectedModel: initialModel,
+    nightIndex: Math.max(
+      0,
+      nightDates.findIndex((d) => d.getTime() === nightDate.getTime())
+    ),
+  }
+  const currentNight = () => nightDates[state.nightIndex] ?? nightDate
+
+  // 指定した夜（0＝今夜）へ移る
+  function goToNight(index) {
+    if (index < 0 || index >= nightDates.length || index === state.nightIndex) return
+    state.nightIndex = index
+    state.selectedModel = null // 夜を移ったら、その夜に合うモデルを選び直す
+    onNightChange?.(index, currentNight())
+    render()
   }
 
-  const state = { selectedModel: pickInitialModel() }
+  // 上の欄。1段目：戻る／地点名、2段目：‹ 日付 › と「今夜」
+  function renderHeader() {
+    const header = el('header', 'top-header detail-header')
 
-  // 夜の前後1時間を含めた範囲の時刻だけを取り出す（グラフ・ヒートマップ共通）
-  function getNightIndices(hourly, info) {
-    const padMs = 60 * 60 * 1000
-    const rangeStart = new Date(info.sunset.getTime() - padMs)
-    const rangeEnd = new Date(info.sunrise.getTime() + padMs)
-
-    return hourly.time
-      .map((t, i) => ({ t, i, time: parseLocalTime(t) }))
-      .filter(({ time }) => time >= rangeStart && time <= rangeEnd)
-  }
-
-  // 雲量ヒートマップ（高層・中層・低層）と月高度グラフを、同じ時間軸（同じグリッドの列幅）で
-  // 1つの横スクロール領域の中にまとめる。スクロールすると両方が一緒に動く。
-  // 黒いほど晴れ、白いほど曇っている（夜空の感覚に合わせた配色）。
-  function renderNightChart(hourly, indices, info, observer) {
-    const wrapper = document.createElement('div')
-    wrapper.className = 'cloud-heatmap'
-
-    const legend = document.createElement('p')
-    legend.className = 'cloud-heatmap-legend'
-    legend.textContent =
-      '黒＝晴れ／白に近いほど曇り。水色の枠は「暗い時間」。下の線は月の高度（黄色＝月が出ている時間）'
-    wrapper.appendChild(legend)
-
-    const scroll = document.createElement('div')
-    scroll.className = 'cloud-heatmap-scroll'
-
-    // 列幅を画面幅に合わせて均等割り（1fr）にし、スクロールしなくても全時間帯が見えるようにする
-    const columns = `40px repeat(${indices.length}, 1fr)`
-    const grid = document.createElement('div')
-    grid.className = 'cloud-heatmap-grid'
-    grid.style.gridTemplateColumns = columns
-    // 行の高さをここで明示する（時刻ラベル・雲3段は低め、月高度グラフは見やすいよう高めに）
-    grid.style.gridTemplateRows = '20px 24px 24px 24px 110px'
-
-    // 1行目：時刻ラベル
-    grid.appendChild(document.createElement('div'))
-    indices.forEach(({ t, time }) => {
-      const cell = document.createElement('div')
-      cell.className = 'cloud-heatmap-time'
-      const isDark = time >= info.duskEnd && time <= info.dawnStart
-      if (isDark) cell.classList.add('cloud-heatmap-dark-col')
-      cell.textContent = formatHourLabel(t).slice(0, 2)
-      grid.appendChild(cell)
+    const back = el('button', 'icon-button back-button', '‹ 戻る')
+    back.type = 'button'
+    back.addEventListener('click', () => {
+      if (chartInstance) chartInstance.destroy()
+      onBack()
     })
+    header.appendChild(back)
+    // 地点名：押すと登録地点の一覧が出て、同じ夜のまま別の地点に切り替えられる
+    const title = el('label', 'detail-title detail-location-picker')
+    const select = el('select', 'detail-location-select')
+    select.setAttribute('aria-label', '表示する地点')
+    locations.forEach((loc) => {
+      const option = el('option', null, loc.name)
+      option.value = loc.id
+      option.selected = loc.id === location.id
+      select.appendChild(option)
+    })
+    select.addEventListener('change', (e) => {
+      const next = locations.find((loc) => loc.id === e.target.value)
+      if (!next || next.id === location.id) return
+      location = next
+      onLocationChange?.(next)
+      render()
+    })
+    title.appendChild(select)
+    header.appendChild(title)
 
-    // 実際の空と同じように、上から高層・中層・低層の順に並べる
-    const layers = [
-      { key: 'cloud_cover_high', label: '高層' },
-      { key: 'cloud_cover_mid', label: '中層' },
-      { key: 'cloud_cover_low', label: '低層' },
+    const dateRow = el('div', 'detail-date-row')
+    const stepButton = (label, aria, index) => {
+      const button = el('button', 'night-step', label)
+      button.type = 'button'
+      button.setAttribute('aria-label', aria)
+      button.disabled = index < 0 || index >= nightDates.length
+      button.addEventListener('click', () => goToNight(index))
+      return button
+    }
+    // ‹ 日付 › は中央に置く（左端に置くと、すぐ上の「‹ 戻る」と押し間違えやすいため）
+    const stepper = el('div', 'detail-date-stepper')
+    stepper.append(
+      stepButton('‹', '前の夜', state.nightIndex - 1),
+      el('span', 'detail-subtitle num', formatNightTitle(currentNight())),
+      stepButton('›', '次の夜', state.nightIndex + 1)
+    )
+    dateRow.append(el('span', 'detail-date-spacer'), stepper)
+    // 「今夜」に戻るボタン（今夜を表示しているときは押せない）
+    const tonight = el('button', 'tonight-button', '今夜')
+    tonight.type = 'button'
+    tonight.setAttribute('aria-label', '今夜に戻る')
+    tonight.disabled = state.nightIndex === 0
+    tonight.addEventListener('click', () => goToNight(0))
+    dateRow.appendChild(tonight)
+    header.appendChild(dateRow)
+    return header
+  }
+
+  // モデルの切り替え（表のすぐ上）。MSM・ECMWF は判定に使うモデル、GSM・AIFS は参考
+  function renderModelSwitch() {
+    const switcher = el('div', 'segmented detail-model-switch')
+    switcher.setAttribute('role', 'group')
+    switcher.setAttribute('aria-label', '表に出す雲の予報（モデル）')
+    ALL_MODELS.forEach((modelKey) => {
+      const button = el('button', 'segmented-button', MODEL_INFO[modelKey].label)
+      if (isReferenceModel(modelKey)) {
+        button.classList.add('is-reference')
+        button.appendChild(el('small', 'segmented-note', '参考'))
+      }
+      button.type = 'button'
+      button.setAttribute('aria-pressed', String(modelKey === state.selectedModel))
+      button.addEventListener('click', () => {
+        if (state.selectedModel === modelKey) return
+        state.selectedModel = modelKey
+        render()
+      })
+      switcher.appendChild(button)
+    })
+    return switcher
+  }
+
+  // 要点カード：判定（ホームの表と同じ書き方）・モデルごとの時間・暗い時間・月・日没・薄明
+  function renderSummaryCard(judgment, info) {
+    const card = el('section', 'card detail-summary')
+
+    const top = el('div', 'detail-judgment-main')
+    const value = el(
+      'span',
+      `detail-judgment-value ${STATUS_CLASSES[judgment.status]}`,
+      judgmentText(judgment)
+    )
+    top.appendChild(value)
+    if (judgment.msm || judgment.ecmwf) {
+      const perModel = ['msm', 'ecmwf']
+        .map((key) => {
+          const r = judgment[key]
+          return `${MODEL_INFO[key].label} ${r?.available ? formatHours(r.clearHours) : '範囲外'}`
+        })
+        .join(' ／ ')
+      top.appendChild(el('span', 'detail-judgment-models num', perModel))
+    }
+    card.appendChild(top)
+
+    // ⚠の説明の行は、⚠が無い夜も場所を空けておく（夜を切り替えてもカードの高さが変わらないように）
+    const warning = el('p', 'detail-warning', '⚠ 周辺5kmに低層雲が多い時間あり')
+    if (!judgment.lowCloudRisk) warning.classList.add('is-placeholder')
+    card.appendChild(warning)
+
+    // 暗い時間・月・日没と薄明を、いつも1行ずつ（3行）で出す
+    const astro = el('div', 'detail-astro')
+    const moon = el('span', 'detail-moon')
+    moon.innerHTML = moonPhaseSvg(info.moonAgeDays, 18)
+    astro.appendChild(moon)
+    const lines = el('div', 'detail-astro-lines num')
+    const darkText =
+      info.darkIntervals.length > 0
+        ? info.darkIntervals.map((i) => `${formatTime(i.start)}〜${formatTime(i.end)}`).join('、')
+        : 'なし（月明かり）'
+    const moonText = info.moonEvents
+      .map((e) => `${e.type === 'rise' ? '月の出' : '月の入り'} ${formatTime(e.time)}`)
+      .join('・')
+    const lineTexts = [
+      [`暗い時間 ${info.darkHours.toFixed(1)}h：${darkText}`, ''],
+      [[moonText, `月齢 ${info.moonAgeDays.toFixed(1)}`].filter(Boolean).join(' ／ '), ''],
+      [
+        `日没 ${formatTime(info.sunset)}・日の出 ${formatTime(info.sunrise)} ／ ` +
+          `天文薄明 ${formatTime(info.duskEnd)}〜${formatTime(info.dawnStart)}`,
+        'muted',
+      ],
     ]
+    lineTexts.forEach(([text, className]) => {
+      const line = el('div', `detail-astro-line ${className}`.trim(), text)
+      line.title = text // 長くて省略されたときも、長押し等で全文を確認できるように
+      lines.appendChild(line)
+    })
+    astro.appendChild(lines)
+    card.appendChild(astro)
+    return card
+  }
 
-    layers.forEach(({ key, label }) => {
-      const labelCell = document.createElement('div')
-      labelCell.className = 'cloud-heatmap-row-label'
-      labelCell.textContent = label
-      grid.appendChild(labelCell)
+  // 1時間ごとの表（ホームの表と同じ時刻の範囲・同じマス）
+  function renderHourGrid(section, hourly, info, observer, notes = []) {
+    const slots = matrixSlots(info)
+    if (slots.length === 0) {
+      section.appendChild(el('p', 'muted', '表を表示できる時間帯がありません'))
+      return section
+    }
 
-      indices.forEach(({ i, t, time }) => {
-        const value = hourly[key][i]
-        const cell = document.createElement('div')
-        cell.className = 'cloud-heatmap-cell'
-        cell.style.backgroundColor = cloudCellColor(value)
-        const isDark = time >= info.duskEnd && time <= info.dawnStart
-        if (isDark) cell.classList.add('cloud-heatmap-dark-col')
-        cell.title = `${formatHourLabel(t)} ${label}雲量 ${value}%`
+    const grid = el('div', 'matrix')
+    grid.style.gridTemplateColumns = `var(--detail-label-width) repeat(${slots.length}, 1fr)`
+
+    // 時刻・空の状態
+    grid.appendChild(el('div', 'matrix-corner'))
+    slots.forEach((slot) => grid.appendChild(hourLabelCell(slot)))
+    grid.appendChild(el('div', 'matrix-row-label matrix-sky-label', '空'))
+    slots.forEach((slot) => grid.appendChild(skyCell(slot, info)))
+
+    // 雲（高層・中層・低層）
+    CLOUD_LAYERS.forEach(({ key, label }) => {
+      grid.appendChild(el('div', 'matrix-row-label detail-row-label', label))
+      slots.forEach((slot) => {
+        const cloud = cloudAt(hourly, slot)
+        const value = cloud?.[key]
+        const cell = cloudCell({
+          percent: value,
+          title: value == null ? '' : `${jstParts(slot).hour}時台 ${label}の雲 ${value}%`,
+        })
+        cell.classList.add('detail-layer-cell')
         grid.appendChild(cell)
       })
     })
 
-    // 月高度の行：ラベル列＋時間の列ぶんをすべてまたぐ1マスの中にグラフを描く。
-    // 列幅がヒートマップと完全に同じグリッドなので、時間軸がぴったり揃う。
-    const moonLabelCell = document.createElement('div')
-    moonLabelCell.className = 'cloud-heatmap-row-label'
-    moonLabelCell.textContent = '月高度'
-    grid.appendChild(moonLabelCell)
+    // 風速（m/s）。注意しきい値以上は黄色
+    grid.appendChild(el('div', 'matrix-row-label detail-row-label', '風'))
+    slots.forEach((slot) => {
+      const wind = windAt(hourly, slot)
+      const cell = el('div', 'detail-wind-cell num', wind == null ? '' : String(Math.round(wind)))
+      if (wind != null && wind >= config.windCautionThreshold) cell.classList.add('is-windy')
+      grid.appendChild(cell)
+    })
 
-    const moonChartCell = document.createElement('div')
-    moonChartCell.className = 'cloud-heatmap-moon-cell'
-    moonChartCell.style.gridColumn = `2 / span ${indices.length}`
+    // 月の高さ（グラフ）。列幅が上の表と同じなので、時間がぴったり揃う
+    grid.appendChild(el('div', 'matrix-row-label detail-row-label', '月'))
+    const moonCell = el('div', 'detail-moon-chart')
+    moonCell.style.gridColumn = `2 / span ${slots.length}`
     const canvas = document.createElement('canvas')
-    moonChartCell.appendChild(canvas)
-    grid.appendChild(moonChartCell)
+    moonCell.appendChild(canvas)
+    grid.appendChild(moonCell)
 
-    scroll.appendChild(grid)
-    wrapper.appendChild(scroll)
-    container.appendChild(wrapper)
+    section.appendChild(grid)
+    section.appendChild(
+      el(
+        'p',
+        'matrix-note detail-grid-note muted',
+        `黒＝晴／白＝曇　風m/s（黄＝${config.windCautionThreshold}以上）　月（黄＝地平線上）`
+      )
+    )
 
-    renderMoonChart(canvas, indices, info, observer)
+    notes.forEach((note) => section.appendChild(el('p', 'matrix-note detail-grid-note muted', note)))
+
+    renderMoonChart(canvas, slots, observer)
+    return section
   }
 
-  // 月高度だけの折れ線グラフ。軸は表示せず、上のヒートマップの列幅と揃えて埋め込む。
-  function renderMoonChart(canvas, indices, info, observer) {
-    const times = indices.map(({ t }) => t)
-    const moonAltitude = times.map((t) => getMoonAltitude(observer, parseLocalTime(t)))
-    const duskIndex = closestIndex(times, info.duskEnd)
-    const dawnIndex = closestIndex(times, info.dawnStart)
-
-    if (chartInstance) {
-      chartInstance.destroy()
-    }
-
+  // 月の高さだけの線グラフ。軸は出さず、上の表の列のまん中に点を合わせる
+  function renderMoonChart(canvas, slots, observer) {
+    const altitudes = slots.map((slot) =>
+      getMoonAltitude(observer, new Date(slot.getTime() + HOUR_MS / 2))
+    )
+    if (chartInstance) chartInstance.destroy()
     chartInstance = new Chart(canvas, {
       type: 'line',
       data: {
-        labels: times.map((t) => formatHourLabel(t)),
+        labels: slots.map((slot) => String(jstParts(slot).hour)),
         datasets: [
           {
-            data: moonAltitude,
-            borderColor: '#718096',
-            borderWidth: 1.5,
-            tension: 0.2,
+            data: altitudes,
+            borderColor: '#5b6683',
+            borderWidth: 2,
+            tension: 0.3,
             pointRadius: 0,
             // 地平線（0°）より上は黄色、下はグレーの線にする
             segment: {
-              borderColor: (ctx) => {
-                const { p0, p1 } = ctx
-                return p0.parsed.y >= 0 && p1.parsed.y >= 0 ? '#d4a300' : '#718096'
-              },
+              borderColor: (ctx) =>
+                ctx.p0.parsed.y >= 0 && ctx.p1.parsed.y >= 0 ? '#f6d77a' : '#5b6683',
             },
           },
         ],
@@ -211,33 +328,23 @@ export function renderDetailScreen(container, { location, nightDate, cache, onBa
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
         layout: { padding: 0 },
         scales: {
-          // offset:true でヒートマップの各マス（列）の中央に点を合わせる
           x: { offset: true, display: false },
           y: { min: -90, max: 90, display: false },
         },
         plugins: {
           legend: { display: false },
+          tooltip: { enabled: false },
           annotation: {
             annotations: {
-              darkBand:
-                duskIndex !== null && dawnIndex !== null
-                  ? {
-                      type: 'box',
-                      xMin: duskIndex,
-                      xMax: dawnIndex,
-                      yScaleID: 'y',
-                      backgroundColor: 'rgba(56, 182, 255, 0.08)',
-                      borderWidth: 0,
-                    }
-                  : undefined,
               horizon: {
                 type: 'line',
                 yMin: 0,
                 yMax: 0,
                 yScaleID: 'y',
-                borderColor: '#4a5568',
+                borderColor: '#2b3550',
                 borderWidth: 1,
               },
             },
@@ -247,124 +354,163 @@ export function renderDetailScreen(container, { location, nightDate, cache, onBa
     })
   }
 
-  function renderChart(hourly, info, observer) {
-    const indices = getNightIndices(hourly, info)
-
-    if (indices.length === 0) {
-      const p = document.createElement('p')
-      p.textContent = 'グラフを表示できる時間帯のデータがありません'
-      container.appendChild(p)
-      return
-    }
-
-    renderNightChart(hourly, indices, info, observer)
+  // 数値の情報（小さなカード）。label：見出し、value：大きく出す値、level：色付きの札、
+  // sub：補足（文字。複数行のときは [{ text, className }] の配列）
+  function tile(label, value, { sub = '', level = null } = {}) {
+    const card = el('div', 'detail-tile')
+    card.appendChild(el('span', 'detail-tile-label', label))
+    const valueRow = el('div', 'detail-tile-value num')
+    if (value instanceof Node) valueRow.appendChild(value)
+    else if (value) valueRow.appendChild(document.createTextNode(value))
+    if (level) valueRow.appendChild(el('span', `level-badge level-${level.key}`, level.text))
+    card.appendChild(valueRow)
+    const subLines = Array.isArray(sub) ? sub : sub ? [{ text: sub }] : []
+    subLines.forEach(({ text, className }) => {
+      card.appendChild(el('span', `detail-tile-sub muted ${className ?? ''}`.trim(), text))
+    })
+    return card
   }
 
-  function renderNumericInfo(hourly, windHourly, info, forecast) {
-    const section = document.createElement('div')
-    section.className = 'detail-numeric-section'
+  function renderInfoTiles(hourly, ecmwfHourly, info, forecast) {
+    const tiles = el('section', 'detail-tiles')
 
-    const precip = sumPrecipitation(hourly, nightDate)
+    // 並び順：最低気温・風・結露リスク／低層雲・雲の流れ・降水量（現地での優先度順）
     const minTemp = minNightTemperature(hourly, info.sunset, info.sunrise)
-    const dew = dewPointRisk(hourly, info.sunset, info.sunrise)
-    const wind = windHourly ? nightWindInfo(windHourly, info.sunset, info.sunrise) : null
-    const windDirDeg = windHourly
-      ? representativeWindDirection850(windHourly, info.sunset, info.sunrise)
-      : null
-
-    const lines = [
-      `前日〜当日の降水量合計：${precip.toFixed(1)}mm`,
-      `夜間の最低気温：${minTemp === null ? '―' : `${minTemp.toFixed(1)}℃`}`,
-      `結露リスク：${dew ? `${DEW_POINT_LABELS[dew.level]}（気温と露点の差 ${dew.minDiff.toFixed(1)}℃）` : '―'}`,
-      `風速（ECMWF参考値）：${wind && wind.maxWindSpeedMs !== null ? `${wind.maxWindSpeedMs.toFixed(1)}m/s` : '―'}${wind?.caution ? '　⚠注意' : ''}`,
-      `最大瞬間風速（ECMWF参考値）：${wind && wind.maxWindGustMs !== null ? `${wind.maxWindGustMs.toFixed(1)}m/s` : '―'}`,
-      `雲が流れてくる方向（850hPa風向き・参考情報。判定には使用していません）：${windDirDeg == null ? '―' : `${directionLabel(windDirDeg)}（${Math.round(windDirDeg)}°）から`}`,
-    ]
-
-    lines.forEach((text) => {
-      const p = document.createElement('p')
-      p.textContent = text
-      section.appendChild(p)
-    })
-
-    const surroundingHeading = document.createElement('p')
-    surroundingHeading.textContent = '周辺地点（5km先）の低層雲の平均：'
-    section.appendChild(surroundingHeading)
-
-    const surroundingList = document.createElement('ul')
-    surroundingLowCloudSummary(forecast, info.sunset, info.sunrise).forEach(
-      ({ direction, averageLowCloud }) => {
-        const li = document.createElement('li')
-        li.textContent = `${direction}：${averageLowCloud === null ? 'データなし' : `${averageLowCloud.toFixed(0)}%`}`
-        surroundingList.appendChild(li)
-      }
+    tiles.appendChild(
+      tile('最低気温', minTemp === null ? '―' : `${minTemp.toFixed(1)}℃`, { sub: '夜間' })
     )
-    section.appendChild(surroundingList)
 
-    return section
+    // 風はECMWFの値を使う（MSMは最大瞬間風速を出さないため）
+    const wind = ecmwfHourly ? nightWindInfo(ecmwfHourly, info.sunset, info.sunrise) : null
+    tiles.appendChild(
+      tile(
+        '風（ECMWF）',
+        wind?.maxWindSpeedMs != null ? `${wind.maxWindSpeedMs.toFixed(1)}m/s` : '―',
+        {
+          // 札を付けると狭いカードで折り返して重なるため、注意は補足の行を黄色にして示す
+          sub: [
+            wind?.maxWindGustMs != null ? { text: `瞬間 ${wind.maxWindGustMs.toFixed(1)}m/s` } : null,
+            wind?.caution
+              ? { text: '注意・参考値', className: 'is-caution' }
+              : { text: '参考値' },
+          ].filter(Boolean),
+        }
+      )
+    )
+
+    const dew = dewPointRisk(hourly, info.sunset, info.sunrise)
+    tiles.appendChild(
+      tile('結露リスク', dew ? '' : '―', {
+        level: dew ? { key: dew.level, text: DEW_POINT_LABELS[dew.level] } : null,
+        sub: dew ? `気温と露点の差 ${dew.minDiff.toFixed(1)}℃` : '',
+      })
+    )
+
+    // 周辺5kmの低層雲（夜間の平均%）。方角どおりに十字に並べる
+    const summary = surroundingLowCloudSummary(forecast, info.sunset, info.sunrise)
+    const compass = el('div', 'detail-compass num')
+    const positions = { 北: 'n', 東: 'e', 南: 's', 西: 'w' }
+    summary.forEach(({ direction, averageLowCloud }) => {
+      const cell = el(
+        'span',
+        `compass-${positions[direction]}`,
+        `${direction}${averageLowCloud === null ? '―' : averageLowCloud.toFixed(0)}`
+      )
+      if (averageLowCloud !== null && averageLowCloud > config.lowCloudRiskThreshold) {
+        cell.classList.add('is-cloudy')
+      }
+      compass.appendChild(cell)
+    })
+    compass.appendChild(el('span', 'compass-center', '●'))
+    tiles.appendChild(
+      tile('周辺5km低層雲', compass, { sub: `%・${config.lowCloudRiskThreshold}超は黄` })
+    )
+
+    // 雲が流れてくる方向（850hPaの風向き）。矢印は雲が進む向き
+    const dirDeg = ecmwfHourly
+      ? representativeWindDirection850(ecmwfHourly, info.sunset, info.sunrise)
+      : null
+    let dirValue = '―'
+    if (dirDeg != null) {
+      dirValue = el('span', 'detail-direction')
+      dirValue.innerHTML =
+        `<svg viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate(${(dirDeg + 180) % 360}deg)">` +
+        '<path d="M12 3v18M12 3l-5 6M12 3l5 6"/></svg>'
+      dirValue.appendChild(document.createTextNode(`${directionLabel(dirDeg)}から`))
+    }
+    tiles.appendChild(tile('雲の流れ', dirValue, { sub: '上空の風・判定には不使用' }))
+
+    const precip = sumPrecipitation(hourly, currentNight())
+    tiles.appendChild(tile('降水量', `${precip.toFixed(1)}mm`, { sub: '前日〜当日の合計' }))
+
+    return tiles
   }
 
   function render() {
     container.innerHTML = ''
+    const header = el('div')
+    container.appendChild(header)
 
-    const backButton = document.createElement('button')
-    backButton.type = 'button'
-    backButton.textContent = '← トップに戻る'
-    backButton.addEventListener('click', () => {
-      if (chartInstance) chartInstance.destroy()
-      onBack()
-    })
-    container.appendChild(backButton)
-
-    const heading = document.createElement('h2')
-    heading.textContent = `${location.name}　${formatDate(nightDate)}`
-    container.appendChild(heading)
-
-    const modelSwitch = document.createElement('div')
-    ;['msm', 'ecmwf'].forEach((modelKey) => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.textContent = MODEL_LABELS[modelKey]
-      button.disabled = modelKey === state.selectedModel
-      button.addEventListener('click', () => {
-        state.selectedModel = modelKey
-        render()
-      })
-      modelSwitch.appendChild(button)
-    })
-    container.appendChild(modelSwitch)
-
+    const night = currentNight()
     const observer = createObserver(location.lat, location.lng, location.elevation ?? 0)
-    const info = computeNightInfo(observer, nightDate)
+    const info = computeNightInfo(observer, night)
+    const { judgment } = computeNightJudgment(location, night, cache)
+    // 判定に使うモデルのうち、この夜に予報が届いている方（MSMが届いていればMSM、なければECMWF）
+    const msm = findForecastForLocation(cache, 'msm', location.id)
+    const msmCovers =
+      msm && judgeModelForNight(msm.center.hourly, info.dawnStart, info.darkIntervals).available
+    const autoMainModel = msmCovers ? 'msm' : 'ecmwf'
+    if (!state.selectedModel) state.selectedModel = autoMainModel
+    const selected = state.selectedModel
+    // 下のカード（気温・結露・降水量・周辺5km）は、参考モデルでは取っていないデータなので、
+    // 参考モデルを選んでいるときも判定に使うモデルの予報で出す
+    const mainModel = isReferenceModel(selected) ? autoMainModel : selected
 
-    const astroInfo = document.createElement('p')
-    astroInfo.className = 'detail-astro-info'
-    astroInfo.textContent =
-      `暗い時間：${info.darkHours.toFixed(1)}h　` +
-      `日没 ${formatTime(info.sunset)} → 日の出 ${formatTime(info.sunrise)}　` +
-      `天文薄明　終了 ${formatTime(info.duskEnd)} 〜 開始 ${formatTime(info.dawnStart)}　` +
-      `月齢 ${info.moonAgeDays.toFixed(1)}`
-    container.appendChild(astroInfo)
+    header.replaceWith(renderHeader())
+    container.appendChild(renderSummaryCard(judgment, info))
 
-    const forecast = findForecast(cache, state.selectedModel, location.id)
-    const judgeInfo = forecast
-      ? judgeModelForNight(forecast.center.hourly, info.dawnStart, info.darkIntervals)
+    // 1時間ごとの表（選んだモデルの雲と風）
+    const gridSection = el('section', 'matrix-section detail-grid')
+    gridSection.appendChild(renderModelSwitch())
+    const selectedForecast = findForecastForLocation(cache, selected, location.id)
+    const selectedResult = selectedForecast
+      ? judgeModelForNight(selectedForecast.center.hourly, info.dawnStart, info.darkIntervals)
       : { available: false }
-
-    if (!forecast || !judgeInfo.available) {
-      const p = document.createElement('p')
-      p.className = 'error-message'
-      p.textContent = `${MODEL_LABELS[state.selectedModel]}のこの夜のデータがありません（予報範囲外の可能性があります）`
-      container.appendChild(p)
-      return
+    const label = MODEL_INFO[selected].label
+    if (!selectedForecast || !selectedResult.available) {
+      gridSection.classList.add('is-empty') // 表が無いときも、表があるときと同じ高さにする
+      gridSection.appendChild(
+        el(
+          'p',
+          'error-message detail-grid-message',
+          !selectedForecast && isReferenceModel(selected)
+            ? `${label}の予報がまだありません（更新ボタンで予報を取り直すと取得します）`
+            : `${label}のこの夜のデータがありません（予報範囲外の可能性があります）`
+        )
+      )
+    } else {
+      // 参考モデルの説明の行。判定に使うモデルのときも場所は空けておく（モデルを切り替えても高さが変わらないように）
+      const notes = [
+        isReferenceModel(selected)
+          ? `${label}（参考）${formatHours(selectedResult.clearHours)}・判定に不使用／` +
+            `下のカードは${MODEL_INFO[mainModel].label}`
+          : '\u00a0', // 潰れない空白（ふつうの空白だと行の高さが0になってしまう）
+      ]
+      renderHourGrid(gridSection, selectedForecast.center.hourly, info, observer, notes)
     }
+    container.appendChild(gridSection)
 
-    renderChart(forecast.center.hourly, info, observer)
-
-    const ecmwfForecast = findForecast(cache, 'ecmwf', location.id)
-    container.appendChild(
-      renderNumericInfo(forecast.center.hourly, ecmwfForecast?.center?.hourly, info, forecast)
-    )
+    // 数値の情報（判定に使うモデルの予報）
+    const mainForecast = findForecastForLocation(cache, mainModel, location.id)
+    const mainAvailable =
+      mainForecast &&
+      judgeModelForNight(mainForecast.center.hourly, info.dawnStart, info.darkIntervals).available
+    if (mainAvailable) {
+      const ecmwfForecast = findForecastForLocation(cache, 'ecmwf', location.id)
+      container.appendChild(
+        renderInfoTiles(mainForecast.center.hourly, ecmwfForecast?.center?.hourly, info, mainForecast)
+      )
+    }
   }
 
   render()

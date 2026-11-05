@@ -13,7 +13,7 @@ export function renderLauncherScreen(container, { getLocation }) {
   section.className = 'launcher-section'
 
   const heading = document.createElement('h3')
-  heading.textContent = 'ランチャー'
+  heading.textContent = 'リンク'
   section.appendChild(heading)
 
   const location = getLocation()

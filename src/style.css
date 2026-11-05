@@ -1,4 +1,43 @@
-/* スマホ幅（360px前後）で崩れないようにする最低限のスタイル */
+/* =========================================================================
+   見た目の設定
+   ・夜に見てもまぶしくない、暗い紺色の配色
+   ・色は下の「色の一覧（変数）」にまとめてあり、ここを変えると全体の色が変わる
+   ・対象：Galaxy S24（画面の幅 約360）
+   ========================================================================= */
+
+:root {
+  /* 色の一覧 */
+  --bg: #070b16; /* 一番奥の背景 */
+  --surface: #0e1526; /* カードの背景 */
+  --surface-2: #151e33; /* ボタン・入力欄の背景 */
+  --border: #1f2a44;
+  --text: #e6ebf5;
+  --muted: #8a96b0; /* 補足の文字 */
+  --accent: #5ab8ff; /* 選択中などの強調 */
+  --danger: #f87171;
+
+  /* 判定の色（◎=緑、△=黄、×=赤、参考=淡い色） */
+  --go: #34d399;
+  --split: #fbbf24;
+  --no-go: #f87171;
+
+  /* 空の状態の色 */
+  --sky-dark: #6366f1;
+  --sky-moon: #d9a520;
+  --sky-twilight: #2b3550;
+
+  /* 曜日の色 */
+  --wd-sat: #60a5fa;
+  --wd-sun: #f87171;
+  --wd-fri: #fbbf24;
+
+  --radius: 12px;
+  --nav-height: 60px;
+  --matrix-label-width: 92px;
+  --detail-label-width: 34px;
+
+  color-scheme: dark;
+}
 
 * {
   box-sizing: border-box;
@@ -6,14 +45,548 @@
 
 body {
   margin: 0;
-  padding: 12px;
-  font-family: system-ui, sans-serif;
-  background: #f5f5f5;
+  padding: 0 12px calc(var(--nav-height) + 16px + env(safe-area-inset-bottom, 0px));
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans JP', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
   max-width: 480px;
   margin: 0 auto;
+}
+
+h2 {
+  font-size: 18px;
+  margin: 12px 0 8px;
+}
+
+h3 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* 数字の幅をそろえる（時刻や数字の列が縦にそろう） */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---- ボタン・入力欄（全画面共通） ---- */
+button {
+  font: inherit;
+  padding: 8px 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 16px; /* 16px未満だとスマホで入力時に画面が勝手に拡大されるため */
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.icon-button {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.error-message {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-offline {
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+}
+
+.empty-message {
+  color: var(--muted);
+  padding: 24px 4px;
+}
+
+/* =========================================================================
+   トップ画面
+   ========================================================================= */
+
+/* 1行目（上に固定） */
+.top-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -12px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+  background: rgba(7, 11, 22, 0.95);
+  border-bottom: 1px solid var(--border);
+}
+
+.top-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.top-status {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.top-status-line {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 次の予報が出ているはず（更新ボタンで新しい予報が取れる） */
+.top-status-line.is-newer {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.refresh-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.red-mode-toggle {
+  color: #fca5a5;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.red-mode-toggle[aria-pressed='true'] {
+  background: #3a0d0d;
+  border-color: #f87171;
+}
+
+.top-notice {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.top-notice p {
+  margin: 0;
+}
+
+/* 7夜のタブ（7つとも横に収める） */
+.night-tabs {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.night-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 0 4px;
+  background: var(--surface);
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.night-tab.is-selected {
+  background: #12284a;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.night-tab-date {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.night-tab-weekday {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.wd-sat {
+  color: var(--wd-sat);
+}
+
+.wd-sun {
+  color: var(--wd-sun);
+}
+
+.wd-fri {
+  color: var(--wd-fri);
+}
+
+.night-tab-moon {
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.moon-icon-dark {
+  fill: #1b2338;
+  stroke: #4b5570;
+  stroke-width: 1.2;
+}
+
+.moon-icon-lit {
+  fill: #f6d77a;
+}
+
+/* タブの判定記号（色だけを付け、背景は付けない） */
+.night-tab-status {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+  background: none !important;
+}
+
+.night-tab-caption {
+  font-size: 9px;
+  color: var(--muted);
+  min-height: 12px;
+  white-space: nowrap;
+}
+
+/* 選んだ夜の要点 */
+.night-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.night-summary-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.night-summary-date {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.night-summary-dark {
+  font-size: 15px;
+  font-weight: 800;
+  color: #a5b4fc;
+}
+
+.night-summary-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.night-summary-ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.compact-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+/* 全地点×時間の表 */
+.matrix-section {
+  margin-top: 10px;
+  padding: 10px 8px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.matrix {
+  display: grid;
+  gap: 2px;
+  align-items: stretch;
+}
+
+/* 1行ぶんをまとめる入れ物。グリッドの並びには影響させず、押したときの処理だけに使う */
+.matrix-row {
+  display: contents;
+  cursor: pointer;
+}
+
+.matrix-hour {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.matrix-row-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.matrix-sky-label {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.matrix-sky {
+  height: 8px;
+  border-radius: 3px;
+  align-self: center;
+}
+
+.sky-dark {
+  background: var(--sky-dark);
+}
+
+.sky-moon {
+  background: var(--sky-moon);
+}
+
+.sky-twilight {
+  background: var(--sky-twilight);
+}
+
+/* 地点名は2行まで折り返し、それ以上は「…」で省略する */
+.matrix-location-name {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.matrix-judgment {
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: none !important;
+}
+
+.matrix-warning {
+  color: var(--split);
+}
+
+/* 1時間ごとの雲のマス（黒＝晴れ／白＝曇り）。色は画面側で付ける */
+.matrix-cell {
+  height: 48px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 晴れ（全層が config.cloudCoverClearMax 以下）のマスには、小さな水色の点を付けて見分けやすくする */
+.matrix-cell.is-clear {
+  background-image: radial-gradient(circle, var(--accent) 0 2px, transparent 2.5px);
+}
+
+.matrix-cell.is-empty {
+  background: repeating-linear-gradient(45deg, #111827 0 3px, #1a2236 3px 6px);
+}
+
+.matrix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 3px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.legend-clear {
+  background: #000 radial-gradient(circle, var(--accent) 0 1.5px, transparent 2px);
+}
+
+.legend-cloudy {
+  background: #fff;
+}
+
+.matrix-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
+/* 判定の文字色（トップ・比較・詳細で共通） */
+.judgment-go {
+  color: var(--go);
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.judgment-split {
+  color: var(--split);
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.judgment-no-go {
+  color: var(--no-go);
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.judgment-reference-go {
+  color: #8fd9b6;
+  background: rgba(52, 211, 153, 0.07);
+}
+
+.judgment-reference-no-go {
+  color: #d39a9a;
+  background: rgba(248, 113, 113, 0.07);
+}
+
+.judgment-neutral {
+  color: var(--muted);
+  background: rgba(138, 150, 176, 0.1);
+}
+
+/* =========================================================================
+   画面の下のボタン（ホーム・比較・地点・リンク）
+   ========================================================================= */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(10, 15, 28, 0.97);
+  border-top: 1px solid var(--border);
+}
+
+.bottom-nav-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.bottom-nav-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bottom-nav-button.is-active {
+  color: var(--accent);
+}
+
+/* =========================================================================
+   赤色モード（画面全体を赤一色にする。仕組みは src/screens/redMode.js）
+   ========================================================================= */
+.red-overlay {
+  display: none;
+}
+
+body.red-mode {
+  background: #000;
+}
+
+/* いったん白黒にしてから… */
+body.red-mode #app,
+body.red-mode .bottom-nav {
+  filter: grayscale(1);
+}
+
+/* …真っ赤な透明シートを掛け算で重ねる（緑・青の光が0になる） */
+body.red-mode .red-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #e00000;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+/* =========================================================================
+   ほかの画面（地点管理・詳細・比較・リンク）
+   ※本格的な見直しはトップ画面の確認後に行う。ここでは暗い配色で読めるようにしている
+   ========================================================================= */
+.screen > h2:first-child {
+  margin-top: 16px;
 }
 
 .location-list {
@@ -23,11 +596,16 @@ body {
   margin-bottom: 12px;
 }
 
-.location-card {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
+.location-card,
+.location-form,
+.backup-section,
+.compare-section,
+.launcher-section,
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
 }
 
 .location-card-buttons {
@@ -38,10 +616,6 @@ body {
 }
 
 .location-form {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -51,190 +625,17 @@ body {
 .location-form input,
 .location-form select {
   width: 100%;
-  padding: 8px;
-  font-size: 16px;
-}
-
-button {
-  padding: 8px 12px;
-  font-size: 14px;
-}
-
-.error-message {
-  color: #c0392b;
-  font-size: 14px;
-  margin: 0;
 }
 
 .backup-section {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.nights-section {
-  margin-top: 16px;
-}
-
-.nights-table {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-}
-
-.nights-row-clickable {
-  cursor: pointer;
-}
-
-.nights-row {
-  flex: 0 0 auto;
-  width: 220px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.nights-row-date {
-  font-weight: bold;
-  margin-bottom: 6px;
-}
-
-.nights-row-judgment {
-  font-size: 15px;
-  font-weight: bold;
-  margin-bottom: 6px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-/* 判定結果の色分け（◎=緑, △=黄, ×=赤, 参考=薄い緑/赤, その他=グレー） */
-.judgment-go {
-  background: #d7f5df;
-  color: #146c2e;
-}
-
-.judgment-split {
-  background: #fff3cd;
-  color: #8a6400;
-}
-
-.judgment-no-go {
-  background: #fde0e0;
-  color: #9b2226;
-}
-
-.judgment-reference-go {
-  background: #eaf5ea;
-  color: #3a7a4e;
-}
-
-.judgment-reference-no-go {
-  background: #f6e9e9;
-  color: #8a4a4a;
-}
-
-.judgment-neutral {
-  background: #eee;
-  color: #666;
-}
-
-.nights-row-detail {
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.detail-numeric-section {
-  margin-top: 12px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.detail-numeric-section ul {
-  margin: 4px 0 0;
-  padding-left: 20px;
-}
-
-.cloud-heatmap {
-  margin-top: 12px;
-  background: #1a1a1a;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.cloud-heatmap-legend {
-  font-size: 12px;
-  color: #ccc;
-  margin: 0 0 8px;
-}
-
-.cloud-heatmap-scroll {
-  /* 列を画面幅に合わせて均等割りにするため、原則スクロールは発生しない */
-  overflow-x: auto;
-  width: 100%;
-}
-
-.cloud-heatmap-grid {
-  display: grid;
-  gap: 1px;
-  width: 100%;
-}
-
-.cloud-heatmap-time {
-  font-size: 9px;
-  text-align: center;
-  color: #ccc;
-  overflow: hidden;
-}
-
-.cloud-heatmap-row-label {
-  font-size: 12px;
-  color: #eee;
-  display: flex;
-  align-items: center;
-}
-
-.cloud-heatmap-cell {
-  border-radius: 2px;
-}
-
-.cloud-heatmap-moon-cell {
-  height: 100%;
-  position: relative;
-}
-
-.cloud-heatmap-moon-cell canvas {
-  position: absolute;
-  inset: 0;
-}
-
-.cloud-heatmap-dark-col {
-  box-shadow: inset 0 0 0 1px rgba(56, 182, 255, 0.5);
-}
-
-.detail-astro-info {
-  font-size: 13px;
-  color: #444;
-  margin: 4px 0 8px;
-}
-
+/* モデル比較 */
 .compare-section {
   margin-top: 12px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
 }
 
 .compare-table {
@@ -245,24 +646,19 @@ button {
 
 .compare-table th,
 .compare-table td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   padding: 6px;
   text-align: center;
 }
 
-
-/* ランチャー */
+/* リンク（ランチャー） */
 .launcher-section {
-  margin-top: 12px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 10px;
+  margin-top: 16px;
 }
 
 .launcher-note {
   font-size: 13px;
-  color: #555;
+  color: var(--muted);
 }
 
 .launcher-buttons {
@@ -277,9 +673,806 @@ button {
   padding: 14px 8px;
   text-align: center;
   font-size: 15px;
-  color: #1c2a5a;
-  background: #eef1fa;
-  border: 1px solid #c9d0e6;
-  border-radius: 8px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   text-decoration: none;
+}
+
+/* ---- トップ画面：見直しで追加した部分 ---- */
+
+/* 行を押した瞬間、少し暗くして「押せた」ことが分かるようにする */
+.matrix-row:active > * {
+  opacity: 0.6;
+}
+
+/* マスの中の小さな風速（m/s） */
+.matrix-cell {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cell-wind {
+  font-size: 9px;
+  line-height: 1;
+  padding-bottom: 3px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.matrix-cell.on-light .cell-wind {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* 風が強い時間（設定の注意しきい値以上）は黄色く太字に */
+.cell-wind.is-windy {
+  color: var(--split);
+  font-weight: 800;
+}
+
+.matrix-cell.on-light .cell-wind.is-windy {
+  color: #9a5b00;
+}
+
+.legend-wind {
+  display: inline-block;
+  margin-right: 3px;
+  font-size: 10px;
+  color: var(--text);
+}
+
+.legend-wind.is-windy {
+  color: var(--split);
+  margin: 0 1px;
+}
+
+/* =========================================================================
+   地点詳細（ホームと同じ部品・同じ見た目。スクロールせずに1画面に収める）
+   ========================================================================= */
+.card {
+  margin-top: 8px;
+}
+
+.detail-header {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.back-button {
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.detail-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 2段目：日付と、前の夜・次の夜へ移るボタン、「今夜」ボタン */
+.detail-date-row {
+  flex: 1 0 100%;
+  display: grid;
+  /* 左右を同じ幅にして、まん中の「‹ 日付 ›」が画面の中央に来るようにする */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.detail-date-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tonight-button {
+  justify-self: end;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.night-step {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.detail-subtitle {
+  min-width: 7.5em;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+/* MSM／ECMWF の切り替え（2つがくっついたボタン） */
+.segmented {
+  flex: 0 0 auto;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented-button {
+  border: none;
+  border-radius: 0;
+  padding: 8px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.segmented-button[aria-pressed='true'] {
+  background: #12284a;
+  color: var(--accent);
+}
+
+/* 要点カード（判定・モデルごとの時間・暗い時間・月・日没・薄明） */
+.detail-summary {
+  padding: 8px 12px;
+}
+
+.detail-judgment-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.detail-judgment-value {
+  font-size: 20px;
+  font-weight: 800;
+  background: none !important;
+}
+
+.detail-judgment-models {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.detail-warning {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+  height: 16px;
+  color: var(--split);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ⚠が無い夜は、場所だけ空けておく */
+.detail-warning.is-placeholder {
+  visibility: hidden;
+}
+
+/* 暗い時間・月・日没の3行。長いときは折り返さずに「…」で省略する */
+.detail-astro-lines {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-astro-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-astro {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.detail-moon {
+  display: flex;
+  padding-top: 1px;
+}
+
+/* 1時間ごとの表 */
+.detail-grid {
+  margin-top: 8px;
+  padding: 8px 8px 6px;
+}
+
+.detail-row-label {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.matrix-cell.detail-layer-cell {
+  height: 22px;
+}
+
+.detail-wind-cell {
+  font-size: 10px;
+  text-align: center;
+  color: var(--muted);
+  align-self: center;
+}
+
+.detail-wind-cell.is-windy {
+  color: var(--split);
+  font-weight: 800;
+}
+
+.detail-moon-chart {
+  position: relative;
+  height: 40px;
+}
+
+.detail-moon-chart canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.detail-grid .matrix-note {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 数値の情報（小さなカードを3列×2段に並べる） */
+.detail-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.detail-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  height: 84px; /* 中身の量に関係なく、どの夜も同じ高さにする */
+  overflow: hidden;
+  padding: 7px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.detail-tile-label {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.detail-tile-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 24px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.detail-tile-sub {
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
+.detail-tile-sub.is-caution {
+  color: var(--split);
+  font-weight: 800;
+}
+
+/* 大きな値の行は折り返さない（折り返すと下の補足と重なるため） */
+.detail-tile-value {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* 結露・風の札（高＝赤、注意＝黄、低＝緑） */
+.level-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid currentColor;
+}
+
+.level-high {
+  color: var(--no-go);
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.level-caution {
+  color: var(--split);
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.level-low {
+  color: var(--go);
+  background: rgba(52, 211, 153, 0.12);
+}
+
+/* 雲が流れてくる方向の矢印 */
+.detail-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.detail-direction svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 周辺5kmの低層雲（方角どおりに十字に並べる） */
+.detail-compass {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  grid-template-areas:
+    '. n .'
+    'w c e'
+    '. s .';
+  justify-content: start;
+  align-items: center;
+  gap: 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.compass-n { grid-area: n; text-align: center; }
+.compass-e { grid-area: e; }
+.compass-s { grid-area: s; text-align: center; }
+.compass-w { grid-area: w; text-align: right; }
+
+.compass-center {
+  grid-area: c;
+  text-align: center;
+  font-size: 6px;
+  color: var(--muted);
+}
+
+.detail-compass .is-cloudy {
+  color: var(--split);
+}
+
+/* =========================================================================
+   モデル比較
+   ========================================================================= */
+/* モデル名の小さな札（MSM＝水色、ECMWF＝紫） */
+.model-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.model-msm {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}
+
+.model-ecmwf {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.16);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+}
+
+.compare-models {
+  display: grid;
+  gap: 8px;
+}
+
+.compare-model-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.compare-model-row .model-chip {
+  flex: 0 0 64px;
+  text-align: center;
+  margin-top: 1px;
+}
+
+.compare-model-texts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compare-model-desc {
+  font-weight: 700;
+}
+
+.compare-model-update {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compare-model-update.is-newer {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.compare-legend {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+}
+
+.compare-section {
+  margin-top: 10px;
+}
+
+.compare-location {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  font-size: 13px;
+}
+
+.compare-table th {
+  padding: 0 4px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+  border: none;
+}
+
+.compare-table td {
+  border: none;
+  height: 46px; /* 「参考」の有無にかかわらず、どの行も同じ高さにする */
+  padding: 4px;
+  text-align: center;
+  background: var(--surface-2);
+}
+
+.compare-table td:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.compare-table td:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
+/* 2つのモデルで判定が割れた夜：行の左に黄色い線 */
+.compare-table tr.is-split td:first-child {
+  box-shadow: inset 3px 0 0 var(--split);
+}
+
+.compare-date {
+  width: 64px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.compare-weekday {
+  margin-left: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.compare-cell {
+  width: 32%;
+}
+
+.compare-hours {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.compare-cell.is-go .compare-hours {
+  color: var(--go);
+}
+
+.compare-cell.is-no-go .compare-hours {
+  color: var(--no-go);
+}
+
+/* 暗い時間のうち晴れが続く割合の横棒 */
+.compare-bar {
+  display: block;
+  height: 4px;
+  margin: 3px 8px 0;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.compare-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.compare-cell.is-go .compare-bar {
+  color: var(--go);
+}
+
+.compare-cell.is-no-go .compare-bar {
+  color: var(--no-go);
+}
+
+.compare-out {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.compare-judge {
+  width: 56px;
+  white-space: nowrap;
+}
+
+.compare-symbol {
+  font-size: 16px;
+  font-weight: 800;
+  background: none !important;
+}
+
+.compare-caption {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* 比較画面の行は押すと詳細が開く。押した瞬間に少し暗くする */
+.compare-table tr.is-clickable {
+  cursor: pointer;
+}
+
+.compare-table tr.is-clickable:active td {
+  opacity: 0.6;
+}
+
+.compare-legend-sub {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- 参考モデル（GSM・AIFS） ---- */
+.model-gsm {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.model-aifs {
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+}
+
+.reference-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  vertical-align: 1px;
+}
+
+/* 表：4つのモデルが並ぶので、列を詰める */
+.compare-table {
+  font-size: 12px;
+}
+
+.compare-table th .model-chip {
+  padding: 1px 4px;
+  font-size: 10px;
+}
+
+.compare-table th.compare-group {
+  padding-bottom: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.compare-date {
+  width: 52px;
+}
+
+.compare-weekday {
+  margin-left: 2px;
+}
+
+.compare-cell {
+  width: auto;
+}
+
+.compare-hours {
+  font-size: 14px;
+}
+
+.compare-bar {
+  margin: 3px 4px 0;
+}
+
+.compare-judge {
+  width: 40px;
+}
+
+/* 参考の列は控えめに（判定には使っていないことが分かるように） */
+.compare-table td.is-reference {
+  background: rgba(21, 30, 51, 0.55);
+}
+
+.compare-table td.is-reference .compare-hours {
+  opacity: 0.8;
+}
+
+.compare-table .is-ref-start {
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.14);
+}
+
+/* 詳細画面：表のすぐ上のモデル切り替え（4つを均等に並べる） */
+.detail-model-switch {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 6px;
+}
+
+.detail-model-switch .segmented-button {
+  padding: 3px 2px;
+  line-height: 1.15;
+}
+
+.detail-model-switch .segmented-button + .segmented-button {
+  border-left: 1px solid var(--border);
+}
+
+/* 参考モデルのボタンには、小さく「参考」と添える */
+.segmented-note {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.detail-grid-message {
+  padding: 8px 2px;
+}
+
+/* 予報が無い夜も、表があるときと同じ高さにする（夜やモデルを切り替えても下のカードの位置が動かないように） */
+.detail-grid.is-empty {
+  min-height: 255px;
+}
+
+/* 比較表の列の幅：日付と判定は決まった幅、残りを4つのモデルで等分する。
+   （自動に任せると「ECMWF」の見出しが長いぶん列が広くなり、同じ時間でも横棒の長さが変わってしまう） */
+.compare-table {
+  table-layout: fixed;
+}
+
+.compare-table .col-date {
+  width: 52px;
+}
+
+.compare-table .col-judge {
+  width: 40px;
+}
+
+/* ---- ホーム：表の上のモデル切り替えと、詰めた凡例 ---- */
+.matrix-model-switch {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: 6px;
+}
+
+.matrix-model-switch .segmented-button {
+  padding: 4px 2px;
+}
+
+.matrix-model-switch .segmented-button + .segmented-button {
+  border-left: 1px solid var(--border);
+}
+
+/* 判定の記号の凡例（横に並べる） */
+.judgment-legend-inline {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.judgment-legend-inline b {
+  margin-right: 2px;
+  font-weight: 800;
+  background: none !important;
+}
+
+/* 詳細画面の地点名（押すと地点を切り替えられる）。見た目は見出しのまま、右に ▾ を付ける */
+.detail-location-picker {
+  position: relative;
+  display: block;
+}
+
+.detail-location-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 26px 0 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  /* 押せる部品だと分かるよう、ほかのボタンと同じ枠と背景を付ける */
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.detail-location-select:focus-visible,
+.detail-location-select:active {
+  border-color: var(--accent);
+}
+
+.detail-location-picker::after {
+  content: '▾';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.detail-location-select option {
+  background: var(--surface);
+  color: var(--text);
 }

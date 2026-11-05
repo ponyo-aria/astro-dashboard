@@ -1,7 +1,8 @@
 // 地点管理画面。地点の追加・編集・削除・並べ替え、JSONの書き出し・読み込みを行う。
 
 import { parseCoordinateInput } from '../logic/coordinateParser.js'
-import { fetchElevation } from '../api/elevation.js'
+import { fetchElevation, fetchElevations } from '../api/elevation.js'
+import { isOffline } from '../api/forecastLoader.js'
 import {
   loadLocations,
   addLocation,
@@ -22,7 +23,8 @@ export function renderLocationsScreen(container, { onChange } = {}) {
   let locations = loadLocations()
   // 編集中の地点ID（nullなら新規追加フォームを閉じている状態）
   let editingId = null
-  let formState = { name: '', lat: '', lng: '', elevation: '', error: '' }
+  // elevationAuto：標高欄が自動取得した値か（手で直した値は、座標を変えても上書きしない）
+  let formState = { name: '', lat: '', lng: '', elevation: '', elevationAuto: false, error: '' }
   let importMode = 'replace'
 
   function persist() {
@@ -32,7 +34,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
 
   function openAddForm() {
     editingId = 'new'
-    formState = { name: '', lat: '', lng: '', elevation: '', error: '' }
+    formState = { name: '', lat: '', lng: '', elevation: '', elevationAuto: false, error: '' }
     render()
   }
 
@@ -43,6 +45,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
       lat: String(loc.lat),
       lng: String(loc.lng),
       elevation: loc.elevation === null ? '' : String(loc.elevation),
+      elevationAuto: false,
       error: '',
     }
     render()
@@ -65,14 +68,51 @@ export function renderLocationsScreen(container, { onChange } = {}) {
     formState.error = ''
     render()
 
-    // 標高を自動取得する（失敗しても手入力できるので画面は止めない）
+    // 標高を自動取得する（座標を貼り付けたときは、標高も新しい座標のものに入れ替える）
+    await autoFillElevation({ force: true })
+  }
+
+  /**
+   * フォームの座標から標高を自動取得する（失敗しても手入力できるので画面は止めない）。
+   * force：手で入れた標高があっても入れ替える（座標を貼り付けたとき）
+   */
+  async function autoFillElevation({ force = false } = {}) {
+    const coords = parseCoordinateInput(`${formState.lat}, ${formState.lng}`)
+    if (!coords.ok) return
+    // 手で直した標高は、緯度・経度を打ち直しても上書きしない
+    if (!force && formState.elevation !== '' && !formState.elevationAuto) return
     try {
-      const elevation = await fetchElevation(result.lat, result.lng)
-      formState.elevation = String(elevation)
+      const elevation = await fetchElevation(coords.lat, coords.lng)
+      formState.elevation = String(Math.round(elevation))
+      formState.elevationAuto = true
     } catch {
       formState.error = '標高の自動取得に失敗しました。手で入力してください'
     }
     render()
+  }
+
+  /**
+   * 標高が「未設定」の地点の標高を、まとめて自動取得して保存する
+   * （初期地点・JSONから読み込んだ地点など）。圏外などで失敗したら、次に開いたときにまた試す。
+   */
+  async function fillMissingElevations() {
+    const missing = locations.filter((loc) => loc.elevation == null)
+    if (missing.length === 0 || isOffline()) return
+    try {
+      const elevations = await fetchElevations(missing.map((loc) => ({ lat: loc.lat, lng: loc.lng })))
+      const byId = new Map(missing.map((loc, i) => [loc.id, elevations?.[i]]))
+      // 取得している間に地点が編集・削除されていても大丈夫なよう、今の一覧に当てはめる
+      locations = locations.map((loc) => {
+        const value = byId.get(loc.id)
+        return loc.elevation == null && typeof value === 'number'
+          ? { ...loc, elevation: Math.round(value) }
+          : loc
+      })
+      persist()
+      render()
+    } catch {
+      // 失敗しても地点管理は使える。標高は「未設定」のまま
+    }
   }
 
   function handleSubmit() {
@@ -137,6 +177,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
         locations = importLocationsFromJson(locations, String(reader.result), importMode)
         persist()
         render()
+        fillMissingElevations() // 読み込んだ地点に標高が無ければ取得する
       } catch (err) {
         window.alert(`読み込みに失敗しました：${err.message}`)
       }
@@ -229,6 +270,8 @@ export function renderLocationsScreen(container, { onChange } = {}) {
     latInput.addEventListener('input', (e) => {
       formState.lat = e.target.value
     })
+    // 緯度・経度を直接打ち込んだときも、2つとも正しく入ったら標高を自動取得する
+    latInput.addEventListener('change', () => autoFillElevation())
 
     const lngInput = document.createElement('input')
     lngInput.type = 'text'
@@ -237,6 +280,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
     lngInput.addEventListener('input', (e) => {
       formState.lng = e.target.value
     })
+    lngInput.addEventListener('change', () => autoFillElevation())
 
     const elevationInput = document.createElement('input')
     elevationInput.type = 'text'
@@ -244,6 +288,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
     elevationInput.value = formState.elevation
     elevationInput.addEventListener('input', (e) => {
       formState.elevation = e.target.value
+      formState.elevationAuto = false // 手で直した値
     })
 
     form.append(nameInput, pasteInput, latInput, lngInput, elevationInput)
@@ -306,6 +351,8 @@ export function renderLocationsScreen(container, { onChange } = {}) {
   }
 
   render()
+  // 標高が「未設定」の地点があれば、開いたときにまとめて取得する
+  fillMissingElevations()
 }
 
 function makeButton(label, onClick) {
