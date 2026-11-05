@@ -68,7 +68,8 @@ function pickDefaultReference(locations) {
   return locations.find((loc) => loc.name === DEFAULT_REFERENCE_NAME) ?? locations[0]
 }
 
-function getReferenceLocation(locations) {
+// トップ画面で選んでいる「基準地点」を返す（ランチャー画面でも使う）
+export function getReferenceLocation(locations) {
   const savedId = localStorage.getItem(REFERENCE_LOCATION_KEY)
   return locations.find((loc) => loc.id === savedId) ?? pickDefaultReference(locations)
 }

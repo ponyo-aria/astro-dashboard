@@ -1,6 +1,7 @@
 // 画面の起点。
 import { renderLocationsScreen } from './screens/locationsScreen.js'
-import { renderTopScreen } from './screens/topScreen.js'
+import { renderTopScreen, getReferenceLocation } from './screens/topScreen.js'
+import { renderLauncherScreen } from './screens/launcherScreen.js'
 import { renderDetailScreen } from './screens/detailScreen.js'
 import { renderModelCompareScreen } from './screens/modelCompareScreen.js'
 import { loadLocations } from './storage/locationsStorage.js'
@@ -19,6 +20,13 @@ const compareToggleButton = document.createElement('button')
 compareToggleButton.type = 'button'
 compareToggleButton.textContent = 'モデル比較を開く'
 
+const launcherToggleButton = document.createElement('button')
+launcherToggleButton.type = 'button'
+launcherToggleButton.textContent = 'ランチャーを開く'
+
+const launcherContainer = document.createElement('div')
+launcherContainer.hidden = true
+
 const toggleButton = document.createElement('button')
 toggleButton.type = 'button'
 toggleButton.textContent = '地点管理を開く'
@@ -32,6 +40,8 @@ app.append(
   detailContainer,
   compareContainer,
   compareToggleButton,
+  launcherToggleButton,
+  launcherContainer,
   toggleButton,
   locationsContainer
 )
@@ -63,6 +73,19 @@ compareToggleButton.addEventListener('click', () => {
     : 'モデル比較を閉じる'
   if (!compareContainer.hidden) {
     renderModelCompareScreen(compareContainer, loadLocations())
+  }
+})
+
+launcherToggleButton.addEventListener('click', () => {
+  launcherContainer.hidden = !launcherContainer.hidden
+  launcherToggleButton.textContent = launcherContainer.hidden ? 'ランチャーを開く' : 'ランチャーを閉じる'
+  if (!launcherContainer.hidden) {
+    renderLauncherScreen(launcherContainer, {
+      getLocation: () => {
+        const locations = loadLocations()
+        return locations.length > 0 ? getReferenceLocation(locations) : null
+      },
+    })
   }
 })
 

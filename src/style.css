@@ -250,3 +250,36 @@ button {
   text-align: center;
 }
 
+
+/* ランチャー */
+.launcher-section {
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.launcher-note {
+  font-size: 13px;
+  color: #555;
+}
+
+.launcher-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* 指で押しやすいよう、ボタンは大きめにする */
+.launcher-button {
+  display: block;
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 15px;
+  color: #1c2a5a;
+  background: #eef1fa;
+  border: 1px solid #c9d0e6;
+  border-radius: 8px;
+  text-decoration: none;
+}
