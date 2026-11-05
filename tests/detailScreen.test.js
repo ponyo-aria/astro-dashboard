@@ -72,7 +72,7 @@ function makeCache() {
 }
 
 describe('地点詳細画面', () => {
-  it('データがあれば、グラフ（canvas）と数値情報、戻るボタンが表示される', () => {
+  it('データがあれば、グラフ（canvas）と数値情報が表示される', () => {
     const container = document.createElement('div')
     const nightDate = new Date('2026-11-04T03:00:00Z') // 2026-11-04 12:00 JST
 
@@ -80,7 +80,7 @@ describe('地点詳細画面', () => {
       location,
       nightDate,
       cache: makeCache(),
-      onBack: () => {},
+      
     })
 
     expect(container.querySelector('canvas')).toBeTruthy()
@@ -113,25 +113,16 @@ describe('地点詳細画面', () => {
     expect(container.textContent).not.toContain('判定には不使用')
     expect(container.textContent).toContain('上空約1.5kmの風')
     expect(container.textContent).toContain('周辺5km')
-    expect(container.querySelector('button').textContent).toContain('戻る')
-  })
-
-  it('戻るボタンを押すとonBackが呼ばれる', () => {
-    const container = document.createElement('div')
-    const onBack = vi.fn()
-    const nightDate = new Date('2026-11-04T03:00:00Z')
-
-    renderDetailScreen(container, { location, nightDate, cache: makeCache(), onBack })
-
-    container.querySelector('button').click()
-    expect(onBack).toHaveBeenCalled()
+    // 上のタイトルは「天気詳細」。戻るボタンは置かない（下のボタンとスマホの戻る操作で移れるため）
+    expect(container.querySelector('.top-title').textContent).toBe('天気詳細')
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent.includes('戻る'))).toBe(false)
   })
 
   it('データが無いモデルを選ぶと、エラーメッセージが出て画面が崩れない', () => {
     const container = document.createElement('div')
     const nightDate = new Date('2026-11-04T03:00:00Z')
 
-    renderDetailScreen(container, { location, nightDate, cache: null, onBack: () => {} })
+    renderDetailScreen(container, { location, nightDate, cache: null })
 
     expect(container.textContent).toContain('データがありません')
     expect(container.innerHTML.trim()).not.toBe('')
@@ -141,7 +132,7 @@ describe('地点詳細画面', () => {
     const container = document.createElement('div')
     const nightDate = new Date('2026-11-04T03:00:00Z')
 
-    renderDetailScreen(container, { location, nightDate, cache: makeCache(), onBack: () => {} })
+    renderDetailScreen(container, { location, nightDate, cache: makeCache() })
 
     const buttons = [...container.querySelectorAll('button')]
     const ecmwfButton = buttons.find((b) => b.textContent === 'ECMWF')
@@ -168,7 +159,7 @@ describe('地点詳細画面', () => {
       nightDate: nights[0],
       nightDates: nights,
       cache: makeCache(),
-      onBack: () => {},
+      
       onNightChange,
     })
 
@@ -200,7 +191,7 @@ describe('地点詳細画面', () => {
       nightDate: nights[2],
       nightDates: nights,
       cache: makeCache(),
-      onBack: () => {},
+      
       onNightChange,
     })
 
@@ -218,7 +209,7 @@ describe('地点詳細画面', () => {
       location,
       nightDate: new Date('2026-11-04T03:00:00Z'),
       cache: makeCache(),
-      onBack: () => {},
+      
     })
     // テストデータでは⚠は無いが、行の場所は空けてある
     const warning = container.querySelector('.detail-warning')
@@ -238,7 +229,7 @@ describe('地点詳細画面', () => {
       nightDate: new Date('2026-11-04T03:00:00Z'),
       initialModel: 'ecmwf',
       cache: makeCache(),
-      onBack: () => {},
+      
     })
     const pressed = [...container.querySelectorAll('.segmented-button')].find(
       (b) => b.getAttribute('aria-pressed') === 'true'
@@ -256,7 +247,7 @@ describe('地点詳細画面', () => {
       location,
       nightDate: new Date('2026-11-04T03:00:00Z'),
       cache,
-      onBack: () => {},
+      
     })
 
     const buttons = [...container.querySelectorAll('.detail-model-switch .segmented-button')]
@@ -281,7 +272,7 @@ describe('地点詳細画面', () => {
       nightDate: new Date('2026-11-04T03:00:00Z'),
       initialModel: 'gsm',
       cache: makeCache(),
-      onBack: () => {},
+      
     })
     expect(container.textContent).toContain('GSMの予報がまだありません')
     expect(container.querySelectorAll('.detail-tile')).toHaveLength(6)
@@ -302,7 +293,7 @@ describe('地点詳細画面', () => {
       locations: [location, other],
       nightDate: new Date('2026-11-04T03:00:00Z'),
       cache,
-      onBack: () => {},
+      
       onLocationChange,
     })
 
@@ -326,7 +317,7 @@ describe('地点詳細画面', () => {
       location,
       nightDate: new Date('2026-11-04T03:00:00Z'),
       cache: makeCache(),
-      onBack: () => {},
+      
     })
     expect(container.querySelector('.detail-warning').textContent).toBe('⚠ 周辺5kmに低層雲が多い時間あり')
   })
@@ -340,7 +331,7 @@ describe('地点詳細画面', () => {
       location,
       nightDate: new Date('2026-11-04T03:00:00Z'),
       cache,
-      onBack: () => {},
+      
     })
     const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
     expect(windTile.querySelector('.detail-tile-value').textContent).toBe('2.0m/s')
@@ -357,7 +348,7 @@ describe('地点詳細画面', () => {
     const group = { locationId: 'a', center: { hourly: windy }, north: { hourly: windy }, east: { hourly: windy }, south: { hourly: windy }, west: { hourly: windy } }
     cache.results.msm = [group]
     const container = document.createElement('div')
-    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache })
     const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
     const value = windTile.querySelector('.detail-tile-value')
     expect(value.textContent).toBe('6.0m/s')
@@ -371,7 +362,7 @@ describe('地点詳細画面', () => {
     const group = { locationId: 'a', center: { hourly: stormy }, north: { hourly: stormy }, east: { hourly: stormy }, south: { hourly: stormy }, west: { hourly: stormy } }
     cache.results.msm = [group]
     const container = document.createElement('div')
-    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache })
     const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
     expect(windTile.classList.contains('tile-danger')).toBe(true)
     expect(windTile.querySelector('.detail-tile-value').classList.contains('text-danger')).toBe(true)
@@ -380,7 +371,7 @@ describe('地点詳細画面', () => {
   it('周辺5kmの低層雲：暗い時間の最大値を%付きで決まった幅の枠に出し、5%超は注意・30%超は警戒', () => {
     const cache = makeCache()
     const container = document.createElement('div')
-    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache })
     const values = [...container.querySelectorAll('.detail-compass .compass-value')].map((e) => e.textContent)
     expect(values).toEqual(['0%', '0%', '0%', '0%']) // テストデータは低層雲0%（%は小さめの文字）
     expect(container.querySelectorAll('.detail-compass .compass-pct')).toHaveLength(4)
@@ -394,7 +385,7 @@ describe('地点詳細画面', () => {
     g.north = { hourly: makeHourly(0, 48, { cloud_cover_low: Array(48).fill(40) }) }
     g.east = { hourly: makeHourly(0, 48, { cloud_cover_low: Array(48).fill(10) }) }
     const c2 = document.createElement('div')
-    renderDetailScreen(c2, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache: cache2, onBack: () => {} })
+    renderDetailScreen(c2, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache: cache2 })
     const tile2 = [...c2.querySelectorAll('.detail-tile')].find((t) => t.textContent.includes('周辺'))
     expect(tile2.classList.contains('tile-danger')).toBe(true)
     expect(tile2.querySelector('.compass-n').classList.contains('text-danger')).toBe(true)

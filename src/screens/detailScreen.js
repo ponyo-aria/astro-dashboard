@@ -1,7 +1,7 @@
 // 地点詳細画面：1地点・1夜ぶんの詳しい情報。ホーム画面と同じ部品・同じ見た目で、
 // スクロールせずに1画面（Galaxy S24）に収まるように並べる。
 //
-//   ・上：戻る／地点名と日付（‹ › で前の夜・次の夜へ）／モデル切り替え（MSM・ECMWF）
+//   ・上：「天気詳細」／地点名（押すと切り替え）、‹ 日付 ›（前の夜・次の夜）と「今夜」
 //   ・要点カード：判定とモデルごとの撮影可能時間、暗い時間・月・日没・天文薄明
 //   ・1時間ごとの表：空の状態・高層／中層／低層の雲・風速・月の高さ（ホームの表と同じ時刻・同じマス）
 //   ・数値の情報（3列×2段）：降水量・最低気温・結露・風・雲が流れてくる方向・周辺5kmの低層雲
@@ -72,7 +72,6 @@ export function renderDetailScreen(
     nightDates = [nightDate],
     initialModel = null,
     cache,
-    onBack,
     onNightChange,
     onLocationChange,
   }
@@ -101,17 +100,11 @@ export function renderDetailScreen(
     render()
   }
 
-  // 上の欄。1段目：戻る／地点名、2段目：‹ 日付 › と「今夜」
+  // 上の欄。1段目：「天気詳細」（ほかの画面と同じ形のタイトル）／地点名、2段目：‹ 日付 › と「今夜」。
+  // 戻るボタンは置かない（下のボタンとスマホの戻る操作で移れるため：2026-11-05 オーナー指示）
   function renderHeader() {
     const header = el('header', 'top-header detail-header')
-
-    const back = el('button', 'icon-button back-button', '‹ 戻る')
-    back.type = 'button'
-    back.addEventListener('click', () => {
-      if (chartInstance) chartInstance.destroy()
-      onBack()
-    })
-    header.appendChild(back)
+    header.appendChild(el('h1', 'top-title', '天気詳細'))
     // 地点名：押すと登録地点の一覧が出て、同じ夜のまま別の地点に切り替えられる
     const title = el('label', 'detail-title detail-location-picker')
     const select = el('select', 'detail-location-select')
@@ -141,7 +134,7 @@ export function renderDetailScreen(
       button.addEventListener('click', () => goToNight(index))
       return button
     }
-    // ‹ 日付 › は中央に置く（左端に置くと、すぐ上の「‹ 戻る」と押し間違えやすいため）
+    // ‹ 日付 › は中央に置く
     const stepper = el('div', 'detail-date-stepper')
     stepper.append(
       stepButton('‹', '前の夜', state.nightIndex - 1),

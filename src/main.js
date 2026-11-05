@@ -1,10 +1,17 @@
-// 画面の起点。画面の下に4つのボタン（ホーム・比較・地点・リンク）を置き、押すと画面が切り替わる。
+// 画面の起点。画面の下に4つのボタン（ホーム・詳細・比較・設定）を置き、押すと画面が切り替わる。
 import { renderLocationsScreen } from './screens/locationsScreen.js'
-import { renderTopScreen, getReferenceLocation, selectNight } from './screens/topScreen.js'
+import {
+  renderTopScreen,
+  getReferenceLocation,
+  selectNight,
+  getNightSelection,
+} from './screens/topScreen.js'
 import { renderDetailScreen } from './screens/detailScreen.js'
 import { renderModelCompareScreen } from './screens/modelCompareScreen.js'
 import { renderLauncherScreen } from './screens/launcherScreen.js'
+import { renderSettingsScreen } from './screens/settingsScreen.js'
 import { initRedMode } from './screens/redMode.js'
+import { el } from './screens/format.js'
 import { loadLocations } from './storage/locationsStorage.js'
 import { loadForecastCache } from './storage/forecastCache.js'
 import './style.css'
@@ -15,34 +22,35 @@ const app = document.querySelector('#app')
 initRedMode()
 
 // ---- 各画面の入れ物 ----
-const homeContainer = document.createElement('div') // トップ画面と地点詳細画面
-const topContainer = document.createElement('div')
-const detailContainer = document.createElement('div')
-detailContainer.hidden = true
-homeContainer.append(topContainer, detailContainer)
-
-const compareContainer = document.createElement('div')
-const locationsContainer = document.createElement('div')
-const launcherContainer = document.createElement('div')
+const topContainer = document.createElement('div') // ホーム
+const detailContainer = document.createElement('div') // 詳細
+const compareContainer = document.createElement('div') // 比較
+const settingsContainer = document.createElement('div') // 設定（地点管理・リンクもここ）
 
 const screens = {
-  home: homeContainer,
+  home: topContainer,
+  detail: detailContainer,
   compare: compareContainer,
-  locations: locationsContainer,
-  launcher: launcherContainer,
+  settings: settingsContainer,
 }
 Object.values(screens).forEach((screen) => {
   screen.className = 'screen'
   app.appendChild(screen)
 })
+const { locationsContainer, launcherContainer } = renderSettingsScreen(settingsContainer)
 
 // ---- 画面の下のボタン ----
 // アイコンは外部から読み込まず、ここに直接描く（圏外でも表示できるように）
 const NAV_ITEMS = [
   { id: 'home', label: 'ホーム', icon: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>' },
+  { id: 'detail', label: '詳細', icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
   { id: 'compare', label: '比較', icon: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
-  { id: 'locations', label: '地点', icon: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>' },
-  { id: 'launcher', label: 'リンク', icon: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>' },
+  {
+    id: 'settings',
+    label: '設定',
+    // 歯が8本の歯車（外から借りず、ここで描いた形）。放射状の線だけだと太陽に見えるため歯車の形にした
+    icon: '<path d="M10.03 4.66 L10.58 1.90 L13.42 1.90 L13.97 4.66 L15.80 5.42 L18.14 3.85 L20.15 5.86 L18.58 8.20 L19.34 10.03 L22.10 10.58 L22.10 13.42 L19.34 13.97 L18.58 15.80 L20.15 18.14 L18.14 20.15 L15.80 18.58 L13.97 19.34 L13.42 22.10 L10.58 22.10 L10.03 19.34 L8.20 18.58 L5.86 20.15 L3.85 18.14 L5.42 15.80 L4.66 13.97 L1.90 13.42 L1.90 10.58 L4.66 10.03 L5.42 8.20 L3.85 5.86 L5.86 3.85 L8.20 5.42Z"/><circle cx="12" cy="12" r="3"/>',
+  },
 ]
 
 const nav = document.createElement('nav')
@@ -75,17 +83,12 @@ let currentScreen = null
 // ---- スマホの「戻る」操作への対応 ----
 // ブラウザの「戻る」の記録（履歴）を使う。記録の段数（depth）は次のとおり：
 //   0：ホーム
-//   1：比較・地点・リンク、またはホームから開いた詳細
+//   1：詳細・比較・設定
 //   2：比較画面から開いた詳細（戻る1回で比較画面に戻れるように）
 // これで、
-//   ・詳細や比較・地点・リンクで「戻る」→ 1つ前の画面（ホームか比較）に戻る
+//   ・詳細や比較・設定で「戻る」→ 1つ前の画面（ホームか比較）に戻る
 //   ・ホームで「戻る」→ アプリを閉じる（Androidの普通の動き）
 //   ・下の「ホーム」ボタン → 何段目にいても一気にホームに戻る
-function currentView() {
-  if (currentScreen === 'home' && !detailContainer.hidden) return 'detail'
-  return currentScreen
-}
-
 function currentDepth() {
   return history.state?.depth ?? 0
 }
@@ -106,26 +109,21 @@ function navigateTo(id) {
     return
   }
   // 比較画面から開いた詳細で「比較」を押したら、比較画面に戻る
-  if (id === 'compare' && currentView() === 'detail' && lastDetail?.from === 'compare') {
+  if (id === 'compare' && currentScreen === 'detail' && currentDepth() === 2) {
     history.back()
     return
   }
-  if (id === currentView()) return
+  if (id === currentScreen) return
   rememberView(id)
-  closeDetail()
-  showScreen(id)
+  if (id === 'detail') showDetail(...defaultDetail())
+  else showScreen(id)
 }
 
 // 「戻る」操作（スワイプ・戻るボタン）をされたとき
 window.addEventListener('popstate', (event) => {
   const view = event.state?.view ?? 'home'
-  if (view === 'detail' && lastDetail) {
-    showScreen('home')
-    showDetail(lastDetail.location, lastDetail.nightDate, lastDetail)
-    return
-  }
-  closeDetail()
-  showScreen(view === 'detail' ? 'home' : view)
+  if (view === 'detail') showDetail(...defaultDetail())
+  else showScreen(view)
 })
 
 /** 下のボタンのうち、光らせるボタンを決める */
@@ -144,7 +142,7 @@ function showScreen(id) {
   })
   highlightNav(id)
 
-  // 比較・リンクは、開くたびに最新の状態で描き直す
+  // 比較・設定（リンク）は、開くたびに最新の状態で描き直す
   if (id === 'compare') {
     // 比較画面で予報を取り直したら、ホームにも反映する
     renderModelCompareScreen(compareContainer, loadLocations(), {
@@ -154,7 +152,7 @@ function showScreen(id) {
         openDetail(location, nightDate, { ...options, from: 'compare' }),
     })
   }
-  if (id === 'launcher') {
+  if (id === 'settings') {
     renderLauncherScreen(launcherContainer, {
       getLocation: () => {
         const locations = loadLocations()
@@ -165,32 +163,48 @@ function showScreen(id) {
   window.scrollTo(0, 0)
 }
 
-// ---- トップ画面と地点詳細画面 ----
+// ---- ホームと詳細 ----
 function refreshTop() {
   renderTopScreen(topContainer, loadLocations(), { onCardClick: openDetail })
 }
 
-let lastDetail = null // 最後に開いた詳細（「進む」操作で開き直すため）
+let lastDetail = null // 最後に開いた詳細（下のボタンの「詳細」や「進む」操作で開き直すため）
 
-// トップ画面・比較画面の行が押されたとき。
+/**
+ * 下のボタンの「詳細」で開く内容：最後に見ていた地点・夜。
+ * まだ一度も開いていなければ、ホームで選んでいる夜の、登録地点の1つ目
+ */
+function defaultDetail() {
+  const locations = loadLocations()
+  const { nightDates, index } = getNightSelection()
+  const location =
+    (lastDetail && locations.find((loc) => loc.id === lastDetail.location.id)) ?? locations[0]
+  const nightDate = lastDetail?.nightDate ?? nightDates[index]
+  return [location, nightDate, { nightDates: lastDetail?.nightDates ?? nightDates, model: lastDetail?.model }]
+}
+
+// ホーム・比較画面の行が押されたとき。
 // from：どの画面から開いたか（'home' か 'compare'）、model：最初に表示するモデル（省略時は自動）
 function openDetail(location, nightDate, { nightDates, model = null, from = 'home' } = {}) {
   rememberView('detail', { stack: from === 'compare' })
   if (from === 'compare') {
-    showScreen('home') // 詳細画面はホームの入れ物の中にあるため
     // ホームで選んでいる夜も、開いた夜にそろえておく（詳細から戻ってホームに行ったとき用）
     const index = nightDates?.findIndex((d) => d.getTime() === nightDate.getTime()) ?? -1
     if (index >= 0) selectNight(index)
   }
-  showDetail(location, nightDate, { nightDates, model, from })
+  showDetail(location, nightDate, { nightDates, model })
 }
 
-function showDetail(location, nightDate, { nightDates, model = null, from = 'home' } = {}) {
-  lastDetail = { location, nightDate, nightDates, model, from }
-  topContainer.hidden = true
-  detailContainer.hidden = false
-  // 比較画面から開いたときは、下のボタンは「比較」を光らせたままにする
-  highlightNav(from === 'compare' ? 'compare' : 'home')
+function showDetail(location, nightDate, { nightDates, model = null } = {}) {
+  showScreen('detail')
+  if (!location) {
+    detailContainer.innerHTML = ''
+    detailContainer.appendChild(
+      el('p', 'empty-message', '地点が登録されていません。下の「設定」の地点管理から追加してください。')
+    )
+    return
+  }
+  lastDetail = { location, nightDate, nightDates, model }
   renderDetailScreen(detailContainer, {
     location,
     locations: loadLocations(),
@@ -204,19 +218,12 @@ function showDetail(location, nightDate, { nightDates, model = null, from = 'hom
       lastDetail.model = null // 夜を移ったらモデルは自動で選び直す
       selectNight(index)
     },
-    // 地点を切り替えたら覚えておく（「進む」操作で開き直したときに同じ地点を出すため）
+    // 地点を切り替えたら覚えておく（下のボタンの「詳細」で開き直したときに同じ地点を出すため）
     onLocationChange: (next) => {
       lastDetail.location = next
     },
-    // 画面上の「‹ 戻る」も、スマホの「戻る」操作と同じ動きにする
-    onBack: () => history.back(),
   })
   window.scrollTo(0, 0)
-}
-
-function closeDetail() {
-  detailContainer.hidden = true
-  topContainer.hidden = false
 }
 
 // 公開版（npm run build で作ったもの）のときだけ、アプリ本体を端末に保存する仕組みを登録する。
@@ -249,7 +256,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   })
 }
 
-// 地点管理画面で地点が変わったら、トップ画面も再計算する
+// 地点管理（設定画面の中）で地点が変わったら、ホームも計算し直す
 renderLocationsScreen(locationsContainer, { onChange: refreshTop })
 refreshTop()
 // 最初の画面（ホーム）を「戻る」の記録の一番下にする

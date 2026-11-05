@@ -26,6 +26,8 @@ export function renderLocationsScreen(container, { onChange } = {}) {
   // elevationAuto：標高欄が自動取得した値か（手で直した値は、座標を変えても上書きしない）
   let formState = { name: '', lat: '', lng: '', elevation: '', elevationAuto: false, error: '' }
   let importMode = 'replace'
+  // バックアップの欄を開いているか（ほとんど使わない機能なので、ふだんは閉じておく）
+  let backupOpen = false
 
   function persist() {
     saveLocations(locations)
@@ -310,8 +312,23 @@ export function renderLocationsScreen(container, { onChange } = {}) {
   }
 
   function renderBackupSection() {
+    // ふだんはボタンだけを出し、押したときだけ中身（書き出し・読み込み）を開く
+    const toggle = makeButton(
+      backupOpen ? 'バックアップを閉じる' : 'バックアップ（書き出し・読み込み）',
+      () => {
+        backupOpen = !backupOpen
+        render()
+      }
+    )
+    toggle.classList.add('backup-toggle')
+    toggle.setAttribute('aria-expanded', String(backupOpen))
+    if (!backupOpen) return toggle
+
+    const wrapper = document.createElement('div')
+    wrapper.appendChild(toggle)
     const section = document.createElement('div')
     section.className = 'backup-section'
+    wrapper.appendChild(section)
 
     const heading = document.createElement('h3')
     heading.textContent = 'バックアップ'
@@ -347,7 +364,7 @@ export function renderLocationsScreen(container, { onChange } = {}) {
     })
     section.appendChild(fileInput)
 
-    return section
+    return wrapper
   }
 
   render()

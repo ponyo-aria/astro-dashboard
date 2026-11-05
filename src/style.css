@@ -157,6 +157,8 @@ select {
   gap: 6px;
   margin: 0 -12px;
   padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+  /* ボタンの無い画面（設定）でも、タイトルの欄の高さと文字の位置をほかの画面とそろえる */
+  min-height: calc(57px + env(safe-area-inset-top, 0px));
   background: rgba(7, 11, 22, 0.95);
   border-bottom: 1px solid var(--border);
 }
@@ -203,16 +205,6 @@ select {
   vertical-align: middle;
 }
 
-.red-mode-toggle {
-  color: #fca5a5;
-  font-weight: 800;
-  font-size: 14px;
-}
-
-.red-mode-toggle[aria-pressed='true'] {
-  background: #3a0d0d;
-  border-color: #f87171;
-}
 
 .top-notice {
   margin-top: 8px;
@@ -728,10 +720,6 @@ body.red-mode .red-overlay {
   gap: 6px 8px;
 }
 
-.back-button {
-  flex: 0 0 auto;
-  font-size: 13px;
-}
 
 .detail-title {
   flex: 1;
@@ -1566,4 +1554,105 @@ body.red-mode .red-overlay {
   background: rgba(248, 113, 113, 0.1);
 }
 
+/* =========================================================================
+   設定画面
+   ========================================================================= */
+
+.settings-section h3 {
+  margin: 0 0 6px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-row-texts {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-row-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settings-row-note {
+  font-size: 11.5px;
+}
+
+
+/* 設定画面の中の「地点管理」の見出しは、ほかの見出し（「表示」「リンク」）と同じ大きさにする */
+.settings-locations > h2:first-child {
+  margin: 20px 0 8px;
+  font-size: 15px;
+}
+
+/* 設定画面のいちばん上の「表示」のカードは、タイトルの欄とすき間をあける */
+.settings-section {
+  margin-top: 10px;
+}
+
+/* 赤色モードのスライド式スイッチ（オフ＝灰色で丸が左、オン＝赤で丸が右） */
+.red-mode-switch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  background: none;
+  border: none;
+}
+
+.switch-state {
+  min-width: 2.2em;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+  text-align: right;
+}
+
+.switch-track {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  background: #2b3550;
+  border: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: left 0.15s;
+}
+
+.red-mode-switch[aria-checked='true'] .switch-state {
+  color: #fca5a5;
+}
+
+.red-mode-switch[aria-checked='true'] .switch-track {
+  background: #b91c1c;
+  border-color: #f87171;
+}
+
+.red-mode-switch[aria-checked='true'] .switch-knob {
+  left: 23px;
+  background: #fff;
+}
+
+/* 地点管理：バックアップを開くボタン */
+.backup-toggle {
+  margin-top: 12px;
+  width: 100%;
+}
 

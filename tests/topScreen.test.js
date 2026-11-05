@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderTopScreen } from '../src/screens/topScreen.js'
+import { renderTopScreen, getNightSelection } from '../src/screens/topScreen.js'
 
 const locations = [
   { id: 'a', name: '朝霧高原', lat: 35.4, lng: 138.6, elevation: 900 },
@@ -83,6 +83,9 @@ describe('トップ画面', () => {
     expect(wind.classList.contains('text-caution')).toBe(true) // 6m/s＝注意（黄）
     // 快晴データなので、晴れの印が付いたマスがある
     expect(container.querySelectorAll('.matrix-cell.is-clear').length).toBeGreaterThan(0)
+
+    // 赤色モードの切り替えはホームには置かない（設定画面で切り替える：2026-11-05 オーナー指示）
+    expect(container.querySelector('.red-mode-toggle, .red-mode-switch')).toBeNull()
 
     // 凡例に「行を押すと詳細」は書かない（2026-11-05 オーナー指示で削除）
     expect(container.querySelector('.matrix-section').textContent).not.toContain('行を押すと詳細')
@@ -302,5 +305,16 @@ describe('トップ画面', () => {
     // 1夜目に戻ると、選んでいたMSMの表示に戻る
     container.querySelectorAll('.night-tab')[0].click()
     expect(pressed()).toBe('MSM')
+  })
+
+  it('下のボタンの「詳細」用に、7夜ぶんの日付とホームで選んでいる夜を返す', async () => {
+    stubSuccessfulFetch()
+    const container = document.createElement('div')
+    await renderTopScreen(container, locations)
+    container.querySelectorAll('.night-tab')[2].click()
+    const { nightDates, index } = getNightSelection()
+    expect(nightDates).toHaveLength(7)
+    expect(index).toBe(2)
+    container.querySelectorAll('.night-tab')[0].click()
   })
 })

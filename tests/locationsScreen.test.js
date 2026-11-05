@@ -145,4 +145,20 @@ describe('地点管理画面', () => {
       expect(input('標高').value).toBe('1480')
     })
   })
+
+  it('バックアップはふだん閉じていて、ボタンを押したときだけ書き出し・読み込みが出る', () => {
+    const container = setup()
+    const toggle = () => container.querySelector('.backup-toggle')
+    expect(toggle().textContent).toBe('バックアップ（書き出し・読み込み）')
+    expect(container.querySelector('.backup-section')).toBeNull()
+    expect(container.textContent).not.toContain('JSONを書き出す')
+
+    toggle().click()
+    expect(container.querySelector('.backup-section')).not.toBeNull()
+    expect(container.textContent).toContain('JSONを書き出す')
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+
+    toggle().click()
+    expect(container.querySelector('.backup-section')).toBeNull()
+  })
 })

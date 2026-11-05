@@ -272,7 +272,7 @@ export function renderModelCompareScreen(container, locations, { onUpdated, onOp
 
     if (locations.length === 0) {
       container.appendChild(
-        el('p', 'empty-message', '地点が登録されていません。下の「地点」から追加してください。')
+        el('p', 'empty-message', '地点が登録されていません。下の「設定」の地点管理から追加してください。')
       )
       return
     }

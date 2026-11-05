@@ -37,7 +37,6 @@ import {
   judgmentText,
   el,
 } from './format.js'
-import { createRedModeToggle } from './redMode.js'
 import { nextModelUpdate } from '../logic/modelUpdate.js'
 
 const TIME_ZONE = 'Asia/Tokyo'
@@ -55,6 +54,13 @@ let redrawTop = null
 export function selectNight(index) {
   selectedNightIndex = index
   redrawTop?.()
+}
+
+/** 今日から7夜ぶんの日付（各夜の正午）と、ホームで選んでいる夜（下のボタンの「詳細」で使う） */
+export function getNightSelection() {
+  const today = new Date()
+  const nightDates = Array.from({ length: NIGHT_COUNT }, (_, i) => noonOf(addDays(today, i)))
+  return { nightDates, index: Math.min(selectedNightIndex, nightDates.length - 1) }
 }
 
 function addDays(date, days) {
@@ -203,7 +209,6 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
     }
     header.appendChild(status)
 
-    header.appendChild(createRedModeToggle())
 
     const refreshButton = el('button', 'icon-button refresh-button')
     refreshButton.type = 'button'
@@ -451,7 +456,7 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
 
     if (locations.length === 0) {
       container.appendChild(
-        el('p', 'empty-message', '地点が登録されていません。下の「地点」から追加してください。')
+        el('p', 'empty-message', '地点が登録されていません。下の「設定」の地点管理から追加してください。')
       )
       return
     }

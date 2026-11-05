@@ -26,8 +26,11 @@ export function setRedMode(on) {
   } catch {
     // 保存できなくても、今開いている間は赤色モードになる
   }
-  document.querySelectorAll('.red-mode-toggle').forEach((button) => {
-    button.setAttribute('aria-pressed', String(on))
+  // 設定画面のスイッチの表示もそろえる
+  document.querySelectorAll('.red-mode-switch').forEach((button) => {
+    button.setAttribute('aria-checked', String(on))
+    const state = button.querySelector('.switch-state')
+    if (state) state.textContent = on ? 'オン' : 'オフ'
   })
 }
 
@@ -42,15 +45,22 @@ export function initRedMode() {
   setRedMode(isRedMode())
 }
 
-/** 赤色モードの切り替えボタンを作る */
-export function createRedModeToggle() {
+/**
+ * 赤色モードのオン・オフを切り替えるスイッチを作る（設定画面に置く）。
+ * 天気予報は出発前に見ることが多いので、ホーム画面には置かない（2026-11-05 オーナー指示）
+ */
+export function createRedModeSwitch() {
+  // スライド式のスイッチ。オフ＝灰色で丸が左、オン＝赤で丸が右。左に今の状態を文字でも出す
+  const on = isRedMode()
   const button = document.createElement('button')
   button.type = 'button'
-  button.className = 'icon-button red-mode-toggle'
-  button.textContent = '赤'
-  button.title = '赤色モード（暗さに慣れた目を守る）'
+  button.className = 'red-mode-switch'
+  button.setAttribute('role', 'switch')
   button.setAttribute('aria-label', '赤色モード')
-  button.setAttribute('aria-pressed', String(isRedMode()))
+  button.setAttribute('aria-checked', String(on))
+  button.innerHTML =
+    `<span class="switch-state">${on ? 'オン' : 'オフ'}</span>` +
+    '<span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>'
   button.addEventListener('click', () => setRedMode(!document.body.classList.contains('red-mode')))
   return button
 }
