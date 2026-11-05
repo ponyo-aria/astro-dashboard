@@ -20,8 +20,17 @@ export function loadForecastCache() {
   }
 }
 
+/**
+ * 予報を端末に保存する。保存場所がいっぱいなどで保存できなかったときは false を返す
+ * （取得した予報はそのまま画面に出せるので、例外にはしない）。
+ */
 export function saveForecastCache(cache) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** 前回取得から10分以内（＝まだ新しい）かどうか。 */

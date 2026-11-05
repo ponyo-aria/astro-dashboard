@@ -53,3 +53,22 @@ describe('予報の取得と保存', () => {
     expect(loadForecastCache()).toBeNull()
   })
 })
+
+describe('端末に保存できなかったとき', () => {
+  it('保存に失敗しても、取得した予報は使える（保存できなかった印が付く）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => ({
+        ok: true,
+        json: async () => (String(url).includes('meta.json') ? meta : Array(5).fill(point)),
+      }))
+    )
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('いっぱい', 'QuotaExceededError')
+    })
+    const cache = await fetchAndSaveForecast(locations)
+    setItem.mockRestore()
+    expect(cache.results.msm).toHaveLength(1)
+    expect(cache.notSaved).toBe(true)
+  })
+})

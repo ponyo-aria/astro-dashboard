@@ -58,6 +58,16 @@ NAV_ITEMS.forEach(({ id, label, icon }) => {
   navButtons[id] = button
   nav.appendChild(button)
 })
+// 出典表示（Open-Meteo の利用条件：データを表示する場所のそばに、出典とライセンスへのリンクを出す）。
+// 各画面の一番下（中身のすぐ下）に1行で出す。画面の入れ物の後ろに1つだけ置くので、
+// どの画面を開いていても、その画面の一番下に表示される
+// （下のボタンの帯の中に置くと押し間違えやすい、というオーナーの指摘で移した）
+const credit = document.createElement('p')
+credit.className = 'page-credit'
+credit.innerHTML =
+  '気象データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>' +
+  '（<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>）を加工して表示'
+app.appendChild(credit)
 document.body.appendChild(nav)
 
 let currentScreen = null

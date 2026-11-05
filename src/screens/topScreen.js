@@ -459,6 +459,15 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
     if (state.errorMessage && !state.loading) {
       container.appendChild(renderNotice())
     }
+    if (state.cache?.notSaved && !state.loading) {
+      container.appendChild(
+        el(
+          'p',
+          'error-message top-notice',
+          '予報を端末に保存できませんでした（圏外では、この予報を表示できません）'
+        )
+      )
+    }
 
     const referenceLocation = getReferenceLocation(locations)
     computeAll(referenceLocation)

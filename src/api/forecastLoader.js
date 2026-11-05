@@ -5,7 +5,8 @@ import { fetchForecast, fetchModelUpdateInfo } from './forecast.js'
 import { saveForecastCache } from '../storage/forecastCache.js'
 
 /**
- * @returns {Promise<object>} 保存した予報データ（取得に失敗したときは例外を投げる）
+ * @returns {Promise<object>} 取得した予報データ（取得に失敗したときは例外を投げる）。
+ *   端末に保存できなかったときは notSaved: true が付く
  */
 export async function fetchAndSaveForecast(locations) {
   // 判定に使うモデル（MSM・ECMWF）と、参考モデル（GSM・AIFS）を同時に取りに行く。
@@ -30,7 +31,8 @@ export async function fetchAndSaveForecast(locations) {
     results: { msm: msmResults, ecmwf: ecmwfResults, gsm, aifs },
     modelMeta: { msm: msmMeta, ecmwf: ecmwfMeta, gsm: gsmMeta, aifs: aifsMeta },
   }
-  saveForecastCache(cache)
+  // 保存できなかったときも、取得した予報はそのまま使う（画面に「保存できなかった」と出す）
+  if (!saveForecastCache(cache)) cache.notSaved = true
   return cache
 }
 

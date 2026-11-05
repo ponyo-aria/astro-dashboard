@@ -48,4 +48,25 @@ export function renderLauncherScreen(container, { getLocation }) {
 
   section.appendChild(list)
   container.appendChild(section)
+  container.appendChild(renderAbout())
+}
+
+// このアプリについて（データの出どころ・ライセンス）
+function renderAbout() {
+  const about = document.createElement('section')
+  about.className = 'launcher-section about-section'
+  about.innerHTML = `
+    <h3>このアプリについて</h3>
+    <p>
+      気象データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>
+      （<a href="https://creativecommons.org/licenses/by/4.0/deed.ja" target="_blank" rel="noopener">CC BY 4.0</a>）。
+      Open-Meteo が提供する、気象庁（MSM・GSM）・ECMWF（IFS・AIFS）などの公開データを使っています。
+    </p>
+    <p>
+      このアプリでは、雲量などのデータをもとに「撮影可能時間」や「◎△×」の判定を計算し、加工して表示しています。
+      判定はアプリ独自の目安で、各機関の予報そのものではありません。
+    </p>
+    <p>天文計算：<a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noopener">Astronomy Engine</a>（MIT License）</p>
+  `
+  return about
 }

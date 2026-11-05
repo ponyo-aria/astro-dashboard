@@ -1476,3 +1476,52 @@ body.red-mode .red-overlay {
   background: var(--surface);
   color: var(--text);
 }
+
+
+.about-section p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* 出典表示（各画面の一番下、中身のすぐ下に1行） */
+.page-credit {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--muted);
+}
+
+.page-credit a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* 詳細画面は、出典の1行も含めて1画面に収まり、しかも出典と下のボタンの間にすき間ができるよう、
+   雲のマス・月のグラフ・小さなカード・暗い時間の行を少しずつ低くする */
+.detail-tile {
+  height: 80px; /* 枠線を含めた高さ。中身は最大79（風のカード）なので、上下の余白を1ずつ詰めて収める */
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* 大きな数字の行も少し詰めて、78の高さに中身がすべて収まるようにする */
+.detail-tile-value {
+  min-height: 21px;
+  font-size: 14.5px;
+}
+
+.detail-moon-chart {
+  height: 32px;
+}
+
+.matrix-cell.detail-layer-cell {
+  height: 19px;
+}
+
+.detail-astro {
+  line-height: 1.35;
+}
+
