@@ -12,7 +12,7 @@ beforeEach(() => {
 })
 
 describe('予報の取得と保存', () => {
-  it('MSM・ECMWF・GSM・AIFSの予報と更新時刻をまとめて保存する', async () => {
+  it('MSM・ECMWF・GSM・AIFSの予報と更新時刻、瞬間風速用のECMWF 9km版をまとめて保存する', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url) => ({
@@ -21,7 +21,8 @@ describe('予報の取得と保存', () => {
       }))
     )
     const cache = await fetchAndSaveForecast(locations)
-    expect(Object.keys(cache.results)).toEqual(['msm', 'ecmwf', 'gsm', 'aifs'])
+    expect(Object.keys(cache.results)).toEqual(['msm', 'ecmwf', 'gsm', 'aifs', 'ecmwfWind'])
+    expect(cache.results.ecmwfWind[0]).toHaveProperty('center')
     expect(cache.results.gsm[0]).toHaveProperty('center')
     expect(cache.modelMeta.aifs.updateIntervalSeconds).toBe(10800)
     expect(loadForecastCache().results.aifs).toHaveLength(1)

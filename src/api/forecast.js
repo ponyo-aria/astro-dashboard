@@ -31,6 +31,15 @@ export const MODELS = {
   // GSM：気象庁の全球モデル（約55km四方）。AIFS：ECMWFのAI版（約28km四方、元は6時間ごとのデータ）
   gsm: { endpointPath: 'jma', modelParam: 'jma_gsm', forecastDays: 8, reference: true },
   aifs: { endpointPath: 'ecmwf', modelParam: 'ecmwf_aifs025_single', forecastDays: 8, reference: true },
+  // 詳細画面の最大瞬間風速用（MSMは瞬間風速を出さないため）。ECMWFの9km版で、今のECMWF（約25km）より細かい。
+  // 中心の1点だけ・風速と瞬間風速だけを取る（2026-11-05 オーナー判断で追加）
+  ecmwfWind: {
+    endpointPath: 'ecmwf',
+    modelParam: 'ecmwf_ifs',
+    forecastDays: 8,
+    reference: true,
+    hourlyVars: ['wind_speed_10m', 'wind_gusts_10m'],
+  },
 }
 
 const HOURLY_VARS = [
@@ -76,7 +85,8 @@ export async function fetchForecast(modelKey, locations) {
   const url = new URL(`https://api.open-meteo.com/v1/${modelInfo.endpointPath}`)
   url.searchParams.set('latitude', flatPoints.map((p) => p.lat).join(','))
   url.searchParams.set('longitude', flatPoints.map((p) => p.lng).join(','))
-  url.searchParams.set('hourly', (centerOnly ? REFERENCE_HOURLY_VARS : HOURLY_VARS).join(','))
+  const hourlyVars = modelInfo.hourlyVars ?? (centerOnly ? REFERENCE_HOURLY_VARS : HOURLY_VARS)
+  url.searchParams.set('hourly', hourlyVars.join(','))
   url.searchParams.set('models', modelInfo.modelParam)
   url.searchParams.set('forecast_days', String(modelInfo.forecastDays))
   url.searchParams.set('past_days', '1')

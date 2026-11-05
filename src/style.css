@@ -706,15 +706,7 @@ body.red-mode .red-overlay {
   color: rgba(0, 0, 0, 0.7);
 }
 
-/* 風が強い時間（設定の注意しきい値以上）は黄色く太字に */
-.cell-wind.is-windy {
-  color: var(--split);
-  font-weight: 800;
-}
 
-.matrix-cell.on-light .cell-wind.is-windy {
-  color: #9a5b00;
-}
 
 .legend-wind {
   display: inline-block;
@@ -723,10 +715,6 @@ body.red-mode .red-overlay {
   color: var(--text);
 }
 
-.legend-wind.is-windy {
-  color: var(--split);
-  margin: 0 1px;
-}
 
 /* =========================================================================
    地点詳細（ホームと同じ部品・同じ見た目。スクロールせずに1画面に収める）
@@ -912,10 +900,6 @@ body.red-mode .red-overlay {
   align-self: center;
 }
 
-.detail-wind-cell.is-windy {
-  color: var(--split);
-  font-weight: 800;
-}
 
 .detail-moon-chart {
   position: relative;
@@ -976,10 +960,6 @@ body.red-mode .red-overlay {
   line-height: 1.35;
 }
 
-.detail-tile-sub.is-caution {
-  color: var(--split);
-  font-weight: 800;
-}
 
 /* 大きな値の行は折り返さない（折り返すと下の補足と重なるため） */
 .detail-tile-value {
@@ -987,30 +967,9 @@ body.red-mode .red-overlay {
   white-space: nowrap;
 }
 
-/* 結露・風の札（高＝赤、注意＝黄、低＝緑） */
-.level-badge {
-  display: inline-block;
-  padding: 0 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 800;
-  border: 1px solid currentColor;
-}
 
-.level-high {
-  color: var(--no-go);
-  background: rgba(248, 113, 113, 0.14);
-}
 
-.level-caution {
-  color: var(--split);
-  background: rgba(251, 191, 36, 0.14);
-}
 
-.level-low {
-  color: var(--go);
-  background: rgba(52, 211, 153, 0.12);
-}
 
 /* 雲が流れてくる方向の矢印 */
 .detail-direction {
@@ -1034,13 +993,15 @@ body.red-mode .red-overlay {
 .detail-compass {
   display: grid;
   grid-template-columns: repeat(3, auto);
+  /* 北・南は3列全体の中央に置き、真ん中の列は点の幅だけにする（カードの幅に収めるため）。
+     西・東の枠は同じ幅なので、全体の中央＝真ん中の点の位置になる */
   grid-template-areas:
-    '. n .'
+    'n n n'
     'w c e'
-    '. s .';
+    's s s';
   justify-content: start;
   align-items: center;
-  gap: 0 3px;
+  gap: 0 5px;
   font-size: 10.5px;
   font-weight: 700;
   line-height: 1.2;
@@ -1059,9 +1020,6 @@ body.red-mode .red-overlay {
   color: var(--muted);
 }
 
-.detail-compass .is-cloudy {
-  color: var(--split);
-}
 
 /* =========================================================================
    モデル比較
@@ -1524,4 +1482,88 @@ body.red-mode .red-overlay {
 .detail-astro {
   line-height: 1.35;
 }
+
+/* 風のカードの補足は折り返さない（折り返すと、決まった高さのカードの下で文字が切れるため） */
+.detail-tile-sub.is-oneline {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 周辺5kmの低層雲：方角の文字と数字の組。数字は決まった幅の枠に右寄せで入れるので、
+   1桁（9%）でも2桁（24%）でも、方角の文字や真ん中の点の位置が変わらない */
+.compass-cell {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.compass-value {
+  display: inline-block;
+  width: 2.15em; /* 数字2桁＋小さめの「%」がちょうど入る幅に固定（1桁でも同じ幅） */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.compass-pct {
+  font-size: 0.72em;
+  font-weight: 400;
+}
+
+/* 北・南は真ん中の列の中央、西・東は真ん中の点を挟んで左右に置く */
+.compass-n,
+.compass-s {
+  justify-self: center;
+}
+
+.compass-w {
+  justify-self: end;
+}
+
+.compass-e {
+  justify-self: start;
+}
+
+
+/* =========================================================================
+   注意の段階の見せ方（風・結露・低層雲・風速の数字で共通）
+   問題なし＝白、注意＝黄、警戒＝赤
+   ========================================================================= */
+.text-caution {
+  color: var(--split) !important;
+}
+
+.text-danger {
+  color: var(--no-go) !important;
+}
+
+.detail-tile-sub.text-caution,
+.detail-tile-sub.text-danger,
+.cell-wind.text-caution,
+.cell-wind.text-danger,
+.detail-wind-cell.text-caution,
+.detail-wind-cell.text-danger {
+  font-weight: 800;
+}
+
+/* 明るい（曇っている）マスの上では、黄・赤を濃くして読めるようにする */
+.matrix-cell.on-light .cell-wind.text-caution {
+  color: #9a5b00 !important;
+}
+
+.matrix-cell.on-light .cell-wind.text-danger {
+  color: #b91c1c !important;
+}
+
+/* 詳細画面の小さなカード：注意＝黄色の枠と背景、警戒＝赤の枠と背景（色だけで知らせる） */
+
+.detail-tile.tile-caution {
+  border-color: rgba(251, 191, 36, 0.75);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.detail-tile.tile-danger {
+  border-color: rgba(248, 113, 113, 0.85);
+  background: rgba(248, 113, 113, 0.1);
+}
+
 

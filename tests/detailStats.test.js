@@ -6,7 +6,7 @@ import {
   nightWindInfo,
   representativeWindDirection850,
   directionLabel,
-  surroundingLowCloudSummary,
+  surroundingLowCloudMax,
   cloudCellColor,
 } from '../src/logic/detailStats.js'
 
@@ -76,27 +76,34 @@ describe('dewPointRisk', () => {
 })
 
 describe('nightWindInfo', () => {
-  it('km/hをm/sに変換してしきい値（5m/s）判定する', () => {
-    const sunset = new Date('2026-11-04T09:00:00Z')
-    const sunrise = new Date('2026-11-04T21:00:00Z')
-    // 18 km/h = 5 m/s ちょうど
-    const hourly = makeHourly(['2026-11-04T18:00'], {
-      wind_speed_10m: [18],
-      wind_gusts_10m: [10],
-    })
-    const result = nightWindInfo(hourly, sunset, sunrise)
-    expect(result.maxWindSpeedMs).toBeCloseTo(5, 5)
-    expect(result.caution).toBe(true)
+  const sunset = new Date('2026-11-04T09:00:00Z')
+  const sunrise = new Date('2026-11-04T21:00:00Z')
+  // 平均の風速の予報（MSMなど）と、瞬間風速の予報（ECMWF 9km）を別々に渡す。値は km/h
+  const mean = (kmh) => makeHourly(['2026-11-04T18:00'], { wind_speed_10m: [kmh] })
+  const gust = (kmh) => makeHourly(['2026-11-04T18:00'], { wind_gusts_10m: [kmh] })
+
+  it('km/hをm/sに直し、平均は1つ目の予報、瞬間は2つ目の予報から取る', () => {
+    const result = nightWindInfo(mean(18), gust(27), sunset, sunrise)
+    expect(result.maxWindSpeedMs).toBeCloseTo(5, 5) // 18km/h = 5m/s
+    expect(result.maxWindGustMs).toBeCloseTo(7.5, 5) // 27km/h = 7.5m/s
   })
 
-  it('風速が弱ければ注意なし', () => {
-    const sunset = new Date('2026-11-04T09:00:00Z')
-    const sunrise = new Date('2026-11-04T21:00:00Z')
-    const hourly = makeHourly(['2026-11-04T18:00'], {
-      wind_speed_10m: [7.2], // 2 m/s
-      wind_gusts_10m: [10.8], // 3 m/s
-    })
-    const result = nightWindInfo(hourly, sunset, sunrise)
+  it('平均の風速が5m/s以上なら注意', () => {
+    expect(nightWindInfo(mean(18), gust(18), sunset, sunrise).caution).toBe(true)
+  })
+
+  it('瞬間風速は10m/s以上で注意（平均が弱くても）。9.9m/sなら注意なし', () => {
+    expect(nightWindInfo(mean(7.2), gust(36), sunset, sunrise).caution).toBe(true) // 瞬間10m/s
+    expect(nightWindInfo(mean(7.2), gust(35.64), sunset, sunrise).caution).toBe(false) // 瞬間9.9m/s
+  })
+
+  it('穏やかな夜（平均2m/s・瞬間8m/s）は注意なし。前は瞬間も5m/sで判定していたので注意になっていた', () => {
+    expect(nightWindInfo(mean(7.2), gust(28.8), sunset, sunrise).caution).toBe(false)
+  })
+
+  it('瞬間風速の予報が無くても、平均だけで判定できる', () => {
+    const result = nightWindInfo(mean(7.2), undefined, sunset, sunrise)
+    expect(result.maxWindGustMs).toBeNull()
     expect(result.caution).toBe(false)
   })
 })
@@ -119,26 +126,30 @@ describe('representativeWindDirection850 / directionLabel', () => {
   })
 })
 
-describe('surroundingLowCloudSummary', () => {
-  it('周辺4方角それぞれの夜間平均低層雲量を求める', () => {
-    const sunset = new Date('2026-11-04T09:00:00Z')
-    const sunrise = new Date('2026-11-04T21:00:00Z')
-    const makePoint = (vals) => ({
-      hourly: makeHourly(['2026-11-04T18:00', '2026-11-05T00:00'], { cloud_cover_low: vals }),
-    })
-    const surroundingPoints = {
-      north: makePoint([10, 20]),
-      east: makePoint([0, 0]),
-      south: makePoint([50, 50]),
-      west: makePoint([30, 10]),
-    }
-    const result = surroundingLowCloudSummary(surroundingPoints, sunset, sunrise)
+describe('surroundingLowCloudMax', () => {
+  // 暗い時間：18:00〜翌02:00（日本時間）
+  const info = {
+    darkIntervals: [{ start: new Date('2026-11-04T09:00:00Z'), end: new Date('2026-11-04T17:00:00Z') }],
+  }
+  const makePoint = (vals) => ({
+    hourly: makeHourly(['2026-11-04T18:00', '2026-11-04T23:00', '2026-11-05T04:00'], { cloud_cover_low: vals }),
+  })
+
+  it('周辺4方角それぞれの、暗い時間のうち一番多い低層雲量を求める（暗い時間の外は数えない）', () => {
+    const result = surroundingLowCloudMax(
+      { north: makePoint([10, 20, 90]), east: makePoint([0, 0, 0]), south: makePoint([50, 5, 0]), west: makePoint([30, 10, 0]) },
+      info
+    )
     expect(result).toEqual([
-      { direction: '北', averageLowCloud: 15 },
-      { direction: '東', averageLowCloud: 0 },
-      { direction: '南', averageLowCloud: 50 },
-      { direction: '西', averageLowCloud: 20 },
+      { direction: '北', maxLowCloud: 20 }, // 4時の90%は暗い時間の外
+      { direction: '東', maxLowCloud: 0 },
+      { direction: '南', maxLowCloud: 50 },
+      { direction: '西', maxLowCloud: 30 },
     ])
+  })
+
+  it('周辺の予報が無いときは null', () => {
+    expect(surroundingLowCloudMax(undefined, info).every((d) => d.maxLowCloud === null)).toBe(true)
   })
 })
 

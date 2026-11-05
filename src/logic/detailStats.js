@@ -77,35 +77,32 @@ export function dewPointRisk(hourly, sunset, sunrise) {
   return { minDiff, level }
 }
 
-/**
- * 夜間（sunset〜sunrise）の最大風速・最大瞬間風速を求める。
- * @returns {{ maxWindSpeed: number|null, maxWindGust: number|null, caution: boolean }}
- */
-export function nightWindInfo(hourly, sunset, sunrise) {
-  let maxWindSpeed = null
-  let maxWindGust = null
-
-  hourly.time.forEach((t, i) => {
+// 夜間（sunset〜sunrise）の、指定した項目の最大値（Open-Meteoからはkm/hで届くので、m/sに直す）
+function nightMaxMs(hourly, key, sunset, sunrise) {
+  let max = null
+  hourly?.time?.forEach((t, i) => {
     const time = parseLocalTime(t)
     if (time >= sunset && time <= sunrise) {
-      const speed = hourly.wind_speed_10m?.[i]
-      const gust = hourly.wind_gusts_10m?.[i]
-      if (speed != null && (maxWindSpeed === null || speed > maxWindSpeed)) {
-        maxWindSpeed = speed
-      }
-      if (gust != null && (maxWindGust === null || gust > maxWindGust)) {
-        maxWindGust = gust
-      }
+      const v = hourly[key]?.[i]
+      if (v != null && (max === null || v > max)) max = v
     }
   })
+  return max === null ? null : max / 3.6
+}
 
-  // 風速はkm/hで返ってくるため、m/sに変換してからしきい値判定する
-  const maxWindSpeedMs = maxWindSpeed === null ? null : maxWindSpeed / 3.6
-  const maxWindGustMs = maxWindGust === null ? null : maxWindGust / 3.6
+/**
+ * 夜間（sunset〜sunrise）の最大風速・最大瞬間風速を求める。
+ * meanHourly：平均の風速に使う予報（MSM。届かない夜はECMWF）
+ * gustHourly：最大瞬間風速に使う予報（MSMは瞬間風速を出さないので、ECMWFの9km版）
+ * 平均が config.windCautionThreshold 以上、または瞬間が config.gustCautionThreshold 以上で「注意」。
+ * @returns {{ maxWindSpeedMs: number|null, maxWindGustMs: number|null, caution: boolean }}
+ */
+export function nightWindInfo(meanHourly, gustHourly, sunset, sunrise) {
+  const maxWindSpeedMs = nightMaxMs(meanHourly, 'wind_speed_10m', sunset, sunrise)
+  const maxWindGustMs = nightMaxMs(gustHourly, 'wind_gusts_10m', sunset, sunrise)
   const caution =
     (maxWindSpeedMs !== null && maxWindSpeedMs >= config.windCautionThreshold) ||
-    (maxWindGustMs !== null && maxWindGustMs >= config.windCautionThreshold)
-
+    (maxWindGustMs !== null && maxWindGustMs >= config.gustCautionThreshold)
   return { maxWindSpeedMs, maxWindGustMs, caution }
 }
 
@@ -151,28 +148,27 @@ export function cloudCellColor(percent) {
 }
 
 /**
- * 周辺4地点（北東南西）それぞれの、夜間の低層雲の平均値を求める。
- * どの方角で雲が多いかを確認するために使う。
+ * 周辺4地点（北東南西）それぞれの、暗い時間のうちいちばん低層雲が多かった時間の値（%）を求める。
+ * ホームの⚠（暗い時間のどこか1時間でも30%を超えたら）と同じ考え方にそろえるため、平均ではなく最大値にする。
+ * 暗い時間が無い夜（月明かり）は、天文薄明の終了〜開始（それも無ければ日没〜日の出）の範囲で見る。
+ * @returns {{ direction: string, maxLowCloud: number|null }[]}
  */
-export function surroundingLowCloudSummary(surroundingPoints, sunset, sunrise) {
+export function surroundingLowCloudMax(surroundingPoints, info) {
+  const ranges =
+    info.darkIntervals?.length > 0
+      ? info.darkIntervals
+      : [{ start: info.duskEnd ?? info.sunset, end: info.dawnStart ?? info.sunrise }]
   const labels = { north: '北', east: '東', south: '南', west: '西' }
   return Object.entries(labels).map(([key, label]) => {
-    const hourly = surroundingPoints[key]?.hourly
-    if (!hourly) {
-      return { direction: label, averageLowCloud: null }
-    }
-    let sum = 0
-    let count = 0
-    hourly.time.forEach((t, i) => {
-      const time = parseLocalTime(t)
-      if (time >= sunset && time <= sunrise) {
-        const v = hourly.cloud_cover_low[i]
-        if (v != null) {
-          sum += v
-          count += 1
-        }
-      }
+    const hourly = surroundingPoints?.[key]?.hourly
+    let max = null
+    hourly?.time?.forEach((t, i) => {
+      // その1時間のまん中の時刻が範囲に入っているか（撮影可能時間の数え方と同じ）
+      const mid = new Date(parseLocalTime(t).getTime() + 30 * 60 * 1000)
+      const inRange = ranges.some((r) => r.start && r.end && mid >= r.start && mid < r.end)
+      const v = hourly.cloud_cover_low?.[i]
+      if (inRange && v != null && (max === null || v > max)) max = v
     })
-    return { direction: label, averageLowCloud: count > 0 ? sum / count : null }
+    return { direction: label, maxLowCloud: max }
   })
 }

@@ -137,8 +137,8 @@ describe('モデル比較画面', () => {
 
     container.querySelector('[aria-label="更新"]').click()
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalled())
-    // 予報（MSM・ECMWF・参考のGSM・AIFS）と更新情報（4モデル）＝8回の通信
-    expect(fetchMock).toHaveBeenCalledTimes(8)
+    // 予報（MSM・ECMWF・参考のGSM・AIFS・瞬間風速用のECMWF 9km）と更新情報（4モデル）＝9回の通信
+    expect(fetchMock).toHaveBeenCalledTimes(9)
     expect(container.querySelector('.top-status').textContent).not.toContain('1/1')
     expect(container.querySelectorAll('.compare-table')).toHaveLength(2)
   })

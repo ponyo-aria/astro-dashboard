@@ -1,6 +1,6 @@
 // 1時間ごとのマス（ホームの表と詳細画面で共通の見た目）。
 
-import { config } from '../config.js'
+import { windLevel } from '../logic/levels.js'
 import { cloudCellColor } from '../logic/detailStats.js'
 import { skyStateOf } from '../logic/nightMatrix.js'
 import { el, jstParts } from './format.js'
@@ -36,8 +36,8 @@ export function cloudCell({ percent, isClear = false, title = '', windMs = null 
   if (percent > 55) cell.classList.add('on-light')
   cell.title = title
   if (windMs != null) {
-    const wind = el('span', 'cell-wind num', String(Math.round(windMs)))
-    if (windMs >= config.windCautionThreshold) wind.classList.add('is-windy')
+    // 風速の数字の色：注意（黄）・警戒（赤）。詳細画面の風のカードと同じしきい値
+    const wind = el('span', `cell-wind num text-${windLevel(windMs)}`, String(Math.round(windMs)))
     cell.appendChild(wind)
     cell.title = `${title} 風速${windMs.toFixed(1)}m/s`.trim()
   }

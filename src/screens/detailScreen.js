@@ -17,6 +17,13 @@ import {
 } from '../logic/nightJudgment.js'
 import { judgeModelForNight } from '../logic/judgment.js'
 import { ALL_MODELS, MODEL_INFO, isReferenceModel } from '../logic/modelInfo.js'
+import {
+  worstLevel,
+  windLevel,
+  gustLevel,
+  dewLevel,
+  lowCloudLevel,
+} from '../logic/levels.js'
 import { matrixSlots, cloudAt, windAt } from '../logic/nightMatrix.js'
 import {
   sumPrecipitation,
@@ -25,7 +32,7 @@ import {
   nightWindInfo,
   representativeWindDirection850,
   directionLabel,
-  surroundingLowCloudSummary,
+  surroundingLowCloudMax,
 } from '../logic/detailStats.js'
 import { hourLabelCell, skyCell, cloudCell } from './hourCells.js'
 import { moonPhaseSvg } from './moonPhaseIcon.js'
@@ -40,7 +47,6 @@ import {
 
 Chart.register(annotationPlugin)
 
-const DEW_POINT_LABELS = { high: '高', caution: '注意', low: '低' }
 const HOUR_MS = 60 * 60 * 1000
 
 // 雲は実際の空と同じように、上から高層・中層・低層の順に並べる
@@ -272,8 +278,12 @@ export function renderDetailScreen(
     grid.appendChild(el('div', 'matrix-row-label detail-row-label', '風'))
     slots.forEach((slot) => {
       const wind = windAt(hourly, slot)
-      const cell = el('div', 'detail-wind-cell num', wind == null ? '' : String(Math.round(wind)))
-      if (wind != null && wind >= config.windCautionThreshold) cell.classList.add('is-windy')
+      // 風速の数字の色：注意（黄）・警戒（赤）
+      const cell = el(
+        'div',
+        `detail-wind-cell num text-${windLevel(wind)}`,
+        wind == null ? '' : String(Math.round(wind))
+      )
       grid.appendChild(cell)
     })
 
@@ -290,7 +300,7 @@ export function renderDetailScreen(
       el(
         'p',
         'matrix-note detail-grid-note muted',
-        `黒＝晴／白＝曇　風m/s（黄＝${config.windCautionThreshold}以上）　月（黄＝地平線上）`
+        `黒＝晴／白＝曇　風m/s（黄${config.windCautionThreshold}・赤${config.windDangerThreshold}〜）　月（黄＝地平線上）`
       )
     )
 
@@ -354,15 +364,18 @@ export function renderDetailScreen(
     })
   }
 
-  // 数値の情報（小さなカード）。label：見出し、value：大きく出す値、level：色付きの札、
-  // sub：補足（文字。複数行のときは [{ text, className }] の配列）
-  function tile(label, value, { sub = '', level = null } = {}) {
-    const card = el('div', 'detail-tile')
+  // 数値の情報（小さなカード）。
+  //   label：見出し、value：大きく出す値（文字か部品）
+  //   level：カードの段階（'ok'＝問題なし／'caution'＝注意（黄）／'danger'＝警戒（赤））。
+  //          風・結露・低層雲で同じ見せ方にそろえる：枠と背景の色（文字の札は付けない：2026-11-05 オーナー指示）
+  //   valueLevel：大きな値の文字の色（省略時は level と同じ）
+  //   sub：補足（文字。複数行のときは [{ text, className }] の配列）
+  function tile(label, value, { sub = '', level = 'ok', valueLevel = level } = {}) {
+    const card = el('div', `detail-tile tile-${level}`)
     card.appendChild(el('span', 'detail-tile-label', label))
-    const valueRow = el('div', 'detail-tile-value num')
+    const valueRow = el('div', `detail-tile-value num text-${valueLevel}`)
     if (value instanceof Node) valueRow.appendChild(value)
     else if (value) valueRow.appendChild(document.createTextNode(value))
-    if (level) valueRow.appendChild(el('span', `level-badge level-${level.key}`, level.text))
     card.appendChild(valueRow)
     const subLines = Array.isArray(sub) ? sub : sub ? [{ text: sub }] : []
     subLines.forEach(({ text, className }) => {
@@ -371,7 +384,7 @@ export function renderDetailScreen(
     return card
   }
 
-  function renderInfoTiles(hourly, ecmwfHourly, info, forecast) {
+  function renderInfoTiles(hourly, ecmwfHourly, info, forecast, mainModelKey) {
     const tiles = el('section', 'detail-tiles')
 
     // 並び順：最低気温・風・結露リスク／低層雲・雲の流れ・降水量（現地での優先度順）
@@ -380,50 +393,59 @@ export function renderDetailScreen(
       tile('最低気温', minTemp === null ? '―' : `${minTemp.toFixed(1)}℃`, { sub: '夜間' })
     )
 
-    // 風はECMWFの値を使う（MSMは最大瞬間風速を出さないため）
-    const wind = ecmwfHourly ? nightWindInfo(ecmwfHourly, info.sunset, info.sunrise) : null
+    // 風：平均の風速は判定に使うモデル（MSM。届かない夜はECMWF）、最大瞬間風速はECMWFの9km版
+    // （MSMは瞬間風速を出さないため。9km版がまだ無い古い保存データのときは、ECMWF（約25km）で代わりに出す）
+    // 平均・瞬間それぞれで段階を決め、厳しい方をカードの段階にする
+    const gustHourly =
+      findForecastForLocation(cache, 'ecmwfWind', location.id)?.center?.hourly ?? ecmwfHourly
+    const wind = nightWindInfo(hourly, gustHourly, info.sunset, info.sunrise)
+    const meanLevel = windLevel(wind.maxWindSpeedMs)
+    const gLevel = gustLevel(wind.maxWindGustMs)
     tiles.appendChild(
       tile(
-        '風（ECMWF）',
-        wind?.maxWindSpeedMs != null ? `${wind.maxWindSpeedMs.toFixed(1)}m/s` : '―',
+        `風（${MODEL_INFO[mainModelKey].label}）`,
+        wind.maxWindSpeedMs != null ? `${wind.maxWindSpeedMs.toFixed(1)}m/s` : '―',
         {
-          // 札を付けると狭いカードで折り返して重なるため、注意は補足の行を黄色にして示す
-          sub: [
-            wind?.maxWindGustMs != null ? { text: `瞬間 ${wind.maxWindGustMs.toFixed(1)}m/s` } : null,
-            wind?.caution
-              ? { text: '注意・参考値', className: 'is-caution' }
-              : { text: '参考値' },
-          ].filter(Boolean),
+          level: worstLevel(meanLevel, gLevel),
+          valueLevel: meanLevel,
+          sub:
+            wind.maxWindGustMs != null
+              ? [{ text: `瞬間 ${wind.maxWindGustMs.toFixed(1)}m/s`, className: `is-oneline text-${gLevel}` }]
+              : [],
         }
       )
     )
 
+    // 結露：気温と露点の差（いちばん小さい時間）を大きく出す。差が小さいほど結露しやすい
     const dew = dewPointRisk(hourly, info.sunset, info.sunrise)
     tiles.appendChild(
-      tile('結露リスク', dew ? '' : '―', {
-        level: dew ? { key: dew.level, text: DEW_POINT_LABELS[dew.level] } : null,
-        sub: dew ? `気温と露点の差 ${dew.minDiff.toFixed(1)}℃` : '',
+      tile('結露リスク', dew ? `${dew.minDiff.toFixed(1)}℃` : '―', {
+        level: dewLevel(dew?.minDiff),
+        sub: '気温と露点の差',
       })
     )
 
-    // 周辺5kmの低層雲（夜間の平均%）。方角どおりに十字に並べる
-    const summary = surroundingLowCloudSummary(forecast, info.sunset, info.sunrise)
+    // 周辺5kmの低層雲：暗い時間のうち、いちばん多かった時間の値（%）。方角どおりに十字に並べる
+    const summary = surroundingLowCloudMax(forecast, info)
     const compass = el('div', 'detail-compass num')
     const positions = { 北: 'n', 東: 'e', 南: 's', 西: 'w' }
-    summary.forEach(({ direction, averageLowCloud }) => {
-      const cell = el(
-        'span',
-        `compass-${positions[direction]}`,
-        `${direction}${averageLowCloud === null ? '―' : averageLowCloud.toFixed(0)}`
-      )
-      if (averageLowCloud !== null && averageLowCloud > config.lowCloudRiskThreshold) {
-        cell.classList.add('is-cloudy')
-      }
+    summary.forEach(({ direction, maxLowCloud }) => {
+      // 方角の文字＋数字（決まった幅の枠）にして、1桁でも2桁でも位置がずれないようにする
+      const cell = el('span', `compass-cell compass-${positions[direction]} text-${lowCloudLevel(maxLowCloud)}`)
+      cell.appendChild(el('span', 'compass-dir', direction))
+      // 数字のあとに小さめの「%」を付ける（カードの幅に収めるため）
+      const value = el('span', 'compass-value', maxLowCloud === null ? '―' : maxLowCloud.toFixed(0))
+      if (maxLowCloud !== null) value.appendChild(el('small', 'compass-pct', '%'))
+      cell.appendChild(value)
       compass.appendChild(cell)
     })
     compass.appendChild(el('span', 'compass-center', '●'))
     tiles.appendChild(
-      tile('周辺5km低層雲', compass, { sub: `%・${config.lowCloudRiskThreshold}超は黄` })
+      tile('周辺5km低層雲', compass, {
+        level: worstLevel(...summary.map((d) => lowCloudLevel(d.maxLowCloud))),
+        valueLevel: 'ok', // 数字の色は方角ごとに付ける
+        sub: '暗い時間の最大',
+      })
     )
 
     // 雲が流れてくる方向（850hPaの風向き）。矢印は雲が進む向き
@@ -438,7 +460,8 @@ export function renderDetailScreen(
         '<path d="M12 3v18M12 3l-5 6M12 3l5 6"/></svg>'
       dirValue.appendChild(document.createTextNode(`${directionLabel(dirDeg)}から`))
     }
-    tiles.appendChild(tile('雲の流れ', dirValue, { sub: '上空の風・判定には不使用' }))
+    // （判定に使わない参考情報だが、その旨はどの表示でも同じなので書かない：2026-11-05 オーナー指示）
+    tiles.appendChild(tile('雲の流れ', dirValue, { sub: '上空約1.5kmの風' }))
 
     const precip = sumPrecipitation(hourly, currentNight())
     tiles.appendChild(tile('降水量', `${precip.toFixed(1)}mm`, { sub: '前日〜当日の合計' }))
@@ -508,7 +531,13 @@ export function renderDetailScreen(
     if (mainAvailable) {
       const ecmwfForecast = findForecastForLocation(cache, 'ecmwf', location.id)
       container.appendChild(
-        renderInfoTiles(mainForecast.center.hourly, ecmwfForecast?.center?.hourly, info, mainForecast)
+        renderInfoTiles(
+          mainForecast.center.hourly,
+          ecmwfForecast?.center?.hourly,
+          info,
+          mainForecast,
+          mainModel
+        )
       )
     }
   }

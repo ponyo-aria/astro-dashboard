@@ -80,7 +80,7 @@ describe('トップ画面', () => {
     // マスの中に風速（m/s）が小さく出て、注意しきい値以上は強調される
     const wind = rows[0].querySelector('.cell-wind')
     expect(wind.textContent).toBe('6')
-    expect(wind.classList.contains('is-windy')).toBe(true)
+    expect(wind.classList.contains('text-caution')).toBe(true) // 6m/s＝注意（黄）
     // 快晴データなので、晴れの印が付いたマスがある
     expect(container.querySelectorAll('.matrix-cell.is-clear').length).toBeGreaterThan(0)
 

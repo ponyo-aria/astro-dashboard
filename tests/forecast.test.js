@@ -73,6 +73,21 @@ describe('fetchForecast', () => {
     expect(url.searchParams.get('hourly')).toBe('cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m')
   })
 
+  it('瞬間風速用のECMWF 9km版は、中心の1点だけ・風速と瞬間風速だけを取る', async () => {
+    let requestedUrl = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        requestedUrl = url
+        return { ok: true, json: async () => makePointResponse(35.4, 138.6) }
+      })
+    )
+    await fetchForecast('ecmwfWind', [{ id: 'a', lat: 35.4, lng: 138.6 }])
+    const url = new URL(requestedUrl)
+    expect(url.searchParams.get('models')).toBe('ecmwf_ifs')
+    expect(url.searchParams.get('hourly')).toBe('wind_speed_10m,wind_gusts_10m')
+  })
+
   it('1地点だけのとき（応答が配列でなく1つだけ）も取り出せる', async () => {
     vi.stubGlobal(
       'fetch',

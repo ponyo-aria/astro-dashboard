@@ -102,9 +102,16 @@ describe('地点詳細画面', () => {
     // 数値の情報
     expect(container.textContent).toContain('降水量')
     expect(container.textContent).toContain('結露リスク')
-    expect(container.querySelector('.level-badge')).toBeTruthy()
-    expect(container.textContent).toContain('風（ECMWF）')
-    expect(container.textContent).toContain('参考値')
+    // 結露：テストデータは気温5℃・露点2℃（差3℃）なので「注意」（黄色の枠と札）
+    const dewTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.includes('結露'))
+    expect(dewTile.classList.contains('tile-caution')).toBe(true)
+    expect(dewTile.querySelector('.tile-level-badge')).toBeNull() // 文字の札は付けない（色だけ）
+    expect(dewTile.querySelector('.detail-tile-value').textContent).toBe('3.0℃')
+    // 平均の風はMSM。「参考値」「判定には不使用」の文言は出さない（2026-11-05 オーナー指示）
+    expect(container.textContent).toContain('風（MSM）')
+    expect(container.textContent).not.toContain('参考値')
+    expect(container.textContent).not.toContain('判定には不使用')
+    expect(container.textContent).toContain('上空約1.5kmの風')
     expect(container.textContent).toContain('周辺5km')
     expect(container.querySelector('button').textContent).toContain('戻る')
   })
@@ -221,7 +228,7 @@ describe('地点詳細画面', () => {
     expect(container.querySelectorAll('.detail-astro-line')).toHaveLength(3)
     // 数値のカードの並び
     const labels = [...container.querySelectorAll('.detail-tile-label')].map((e) => e.textContent)
-    expect(labels).toEqual(['最低気温', '風（ECMWF）', '結露リスク', '周辺5km低層雲', '雲の流れ', '降水量'])
+    expect(labels).toEqual(['最低気温', '風（MSM）', '結露リスク', '周辺5km低層雲', '雲の流れ', '降水量'])
   })
 
   it('最初に表示するモデルを指定して開ける（比較画面でECMWFのマスを押したとき）', () => {
@@ -322,5 +329,76 @@ describe('地点詳細画面', () => {
       onBack: () => {},
     })
     expect(container.querySelector('.detail-warning').textContent).toBe('⚠ 周辺5kmに低層雲が多い時間あり')
+  })
+
+  it('風のカード：平均はMSM、瞬間風速はECMWF 9km版の値を使い、瞬間10m/s以上で注意', () => {
+    const cache = makeCache() // テストデータの平均は 7.2km/h ＝ 2m/s
+    const gusty = makeHourly(0, 48, { wind_gusts_10m: Array(48).fill(43.2) }) // 12m/s
+    cache.results.ecmwfWind = [{ locationId: 'a', center: { hourly: gusty } }]
+    const container = document.createElement('div')
+    renderDetailScreen(container, {
+      location,
+      nightDate: new Date('2026-11-04T03:00:00Z'),
+      cache,
+      onBack: () => {},
+    })
+    const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
+    expect(windTile.querySelector('.detail-tile-value').textContent).toBe('2.0m/s')
+    // 瞬間12m/s＝注意（黄）。カードは黄色の枠、瞬間の数字も黄色
+    expect(windTile.classList.contains('tile-caution')).toBe(true)
+    expect(windTile.querySelector('.detail-tile-sub.text-caution').textContent).toBe('瞬間 12.0m/s')
+    // 平均は2m/sなので、平均の数字は白のまま
+    expect(windTile.querySelector('.detail-tile-value').classList.contains('text-ok')).toBe(true)
+  })
+
+  it('平均の風速が5m/s以上なら、平均の数字も黄色にする', () => {
+    const cache = makeCache()
+    const windy = makeHourly(0, 48, { wind_speed_10m: Array(48).fill(21.6) }) // 6m/s
+    const group = { locationId: 'a', center: { hourly: windy }, north: { hourly: windy }, east: { hourly: windy }, south: { hourly: windy }, west: { hourly: windy } }
+    cache.results.msm = [group]
+    const container = document.createElement('div')
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
+    const value = windTile.querySelector('.detail-tile-value')
+    expect(value.textContent).toBe('6.0m/s')
+    expect(value.classList.contains('text-caution')).toBe(true)
+    expect(windTile.classList.contains('tile-caution')).toBe(true)
+  })
+
+  it('平均8m/s以上・瞬間15m/s以上なら「警戒」（赤の枠）', () => {
+    const cache = makeCache()
+    const stormy = makeHourly(0, 48, { wind_speed_10m: Array(48).fill(32.4) }) // 9m/s
+    const group = { locationId: 'a', center: { hourly: stormy }, north: { hourly: stormy }, east: { hourly: stormy }, south: { hourly: stormy }, west: { hourly: stormy } }
+    cache.results.msm = [group]
+    const container = document.createElement('div')
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    const windTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('風'))
+    expect(windTile.classList.contains('tile-danger')).toBe(true)
+    expect(windTile.querySelector('.detail-tile-value').classList.contains('text-danger')).toBe(true)
+  })
+
+  it('周辺5kmの低層雲：暗い時間の最大値を%付きで決まった幅の枠に出し、5%超は注意・30%超は警戒', () => {
+    const cache = makeCache()
+    const container = document.createElement('div')
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache, onBack: () => {} })
+    const values = [...container.querySelectorAll('.detail-compass .compass-value')].map((e) => e.textContent)
+    expect(values).toEqual(['0%', '0%', '0%', '0%']) // テストデータは低層雲0%（%は小さめの文字）
+    expect(container.querySelectorAll('.detail-compass .compass-pct')).toHaveLength(4)
+    expect(container.textContent).toContain('暗い時間の最大')
+    const cloudTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.includes('周辺'))
+    expect(cloudTile.classList.contains('tile-ok')).toBe(true) // 0%なので問題なし
+
+    // 北だけ一晩中40%（警戒）、東は10%（注意）
+    const cache2 = makeCache()
+    const g = cache2.results.msm[0]
+    g.north = { hourly: makeHourly(0, 48, { cloud_cover_low: Array(48).fill(40) }) }
+    g.east = { hourly: makeHourly(0, 48, { cloud_cover_low: Array(48).fill(10) }) }
+    const c2 = document.createElement('div')
+    renderDetailScreen(c2, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache: cache2, onBack: () => {} })
+    const tile2 = [...c2.querySelectorAll('.detail-tile')].find((t) => t.textContent.includes('周辺'))
+    expect(tile2.classList.contains('tile-danger')).toBe(true)
+    expect(tile2.querySelector('.compass-n').classList.contains('text-danger')).toBe(true)
+    expect(tile2.querySelector('.compass-e').classList.contains('text-caution')).toBe(true)
+    expect(tile2.querySelector('.compass-s').classList.contains('text-ok')).toBe(true)
   })
 })

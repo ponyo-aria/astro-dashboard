@@ -429,7 +429,7 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
       <span><i class="legend-swatch sky-dark"></i>暗い</span>
       <span><i class="legend-swatch sky-moon"></i>月</span>
       <span><i class="legend-swatch sky-twilight"></i>薄明</span>
-      <span><b class="legend-wind num">3</b>風m/s（<b class="legend-wind is-windy">黄</b>＝${config.windCautionThreshold}以上）</span>
+      <span><b class="legend-wind num">3</b>風m/s（<b class="legend-wind text-caution">黄</b>＝${config.windCautionThreshold}・<b class="legend-wind text-danger">赤</b>＝${config.windDangerThreshold}以上）</span>
     `
     section.appendChild(legend)
 

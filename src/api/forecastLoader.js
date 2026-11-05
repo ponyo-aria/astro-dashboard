@@ -11,11 +11,13 @@ import { saveForecastCache } from '../storage/forecastCache.js'
 export async function fetchAndSaveForecast(locations) {
   // 判定に使うモデル（MSM・ECMWF）と、参考モデル（GSM・AIFS）を同時に取りに行く。
   // 参考モデルは取れなくても困らないので、失敗しても全体は失敗にしない（その列が「―」になるだけ）
+  // （ECMWF 9km版の風＝詳細画面の最大瞬間風速用も、同じく取れなくても困らない扱い）
   const referenceTasks = Promise.allSettled([
     fetchForecast('gsm', locations),
     fetchForecast('aifs', locations),
     fetchModelUpdateInfo('gsm'),
     fetchModelUpdateInfo('aifs'),
+    fetchForecast('ecmwfWind', locations),
   ])
   const [msmResults, ecmwfResults, msmMeta, ecmwfMeta] = await Promise.all([
     fetchForecast('msm', locations),
@@ -23,12 +25,12 @@ export async function fetchAndSaveForecast(locations) {
     fetchModelUpdateInfo('msm'),
     fetchModelUpdateInfo('ecmwf'),
   ])
-  const [gsm, aifs, gsmMeta, aifsMeta] = (await referenceTasks).map((r) =>
+  const [gsm, aifs, gsmMeta, aifsMeta, ecmwfWind] = (await referenceTasks).map((r) =>
     r.status === 'fulfilled' ? r.value : undefined
   )
   const cache = {
     fetchedAt: Date.now(),
-    results: { msm: msmResults, ecmwf: ecmwfResults, gsm, aifs },
+    results: { msm: msmResults, ecmwf: ecmwfResults, gsm, aifs, ecmwfWind },
     modelMeta: { msm: msmMeta, ecmwf: ecmwfMeta, gsm: gsmMeta, aifs: aifsMeta },
   }
   // 保存できなかったときも、取得した予報はそのまま使う（画面に「保存できなかった」と出す）
