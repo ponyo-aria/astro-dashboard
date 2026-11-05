@@ -100,7 +100,7 @@ describe('地点詳細画面', () => {
     expect(container.textContent).toContain('日没')
     expect(container.textContent).toContain('天文薄明')
     // 数値の情報
-    expect(container.textContent).toContain('降水量')
+    expect(container.textContent).toContain('直前の雨')
     expect(container.textContent).toContain('結露リスク')
     // 結露：テストデータは気温5℃・露点2℃（差3℃）なので「注意」（黄色の枠と札）
     const dewTile = [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.includes('結露'))
@@ -219,7 +219,8 @@ describe('地点詳細画面', () => {
     expect(container.querySelectorAll('.detail-astro-line')).toHaveLength(3)
     // 数値のカードの並び
     const labels = [...container.querySelectorAll('.detail-tile-label')].map((e) => e.textContent)
-    expect(labels).toEqual(['最低気温', '風（MSM）', '結露リスク', '周辺5km低層雲', '雲の流れ', '降水量'])
+    // 1段目＝風と雲、2段目＝温度と水分
+    expect(labels).toEqual(['風（MSM）', '周辺5km低層雲', '雲の流れ', '最低気温', '直前の雨', '結露リスク'])
   })
 
   it('最初に表示するモデルを指定して開ける（比較画面でECMWFのマスを押したとき）', () => {
@@ -391,5 +392,25 @@ describe('地点詳細画面', () => {
     expect(tile2.querySelector('.compass-n').classList.contains('text-danger')).toBe(true)
     expect(tile2.querySelector('.compass-e').classList.contains('text-caution')).toBe(true)
     expect(tile2.querySelector('.compass-s').classList.contains('text-ok')).toBe(true)
+  })
+
+  it('直前の雨：降っていなければ「なし」、暗くなる前に降っていれば量と止んでからの時間・注意の色', () => {
+    // テストデータは雨0mm
+    const container = document.createElement('div')
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache: makeCache() })
+    const rainTile = () => [...container.querySelectorAll('.detail-tile')].find((t) => t.textContent.startsWith('直前の雨'))
+    expect(rainTile().querySelector('.detail-tile-value').textContent).toBe('なし')
+    expect(rainTile().textContent).toContain('24時間降雨なし')
+    expect(rainTile().classList.contains('tile-ok')).toBe(true)
+
+    // 11/4 の 12〜13時に 3mm 降った（暗くなる 18時ごろの約5時間前）→ 地面が濡れているので注意
+    const cache = makeCache()
+    const wet = makeHourly(0, 48, { precipitation: Array.from({ length: 48 }, (_, i) => (i === 13 ? 3 : 0)) })
+    cache.results.msm = [{ locationId: 'a', center: { hourly: wet }, north: { hourly: wet }, east: { hourly: wet }, south: { hourly: wet }, west: { hourly: wet } }]
+    container.innerHTML = ''
+    renderDetailScreen(container, { location, nightDate: new Date('2026-11-04T03:00:00Z'), cache })
+    expect(rainTile().querySelector('.detail-tile-value').textContent).toBe('3.0mm')
+    expect(rainTile().textContent).toMatch(/止んで\d+時間/)
+    expect(rainTile().classList.contains('tile-caution')).toBe(true)
   })
 })

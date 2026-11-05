@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { worstLevel, windLevel, gustLevel, dewLevel, lowCloudLevel } from '../src/logic/levels.js'
+import { worstLevel, windLevel, gustLevel, dewLevel, lowCloudLevel, rainLevel } from '../src/logic/levels.js'
 
 describe('注意の段階（問題なし→注意→警戒）', () => {
   it('平均の風速：5m/s以上で注意、8m/s以上で警戒', () => {
@@ -32,5 +32,16 @@ describe('注意の段階（問題なし→注意→警戒）', () => {
     expect(worstLevel('ok', 'caution')).toBe('caution')
     expect(worstLevel('caution', 'danger', 'ok')).toBe('danger')
     expect(worstLevel()).toBe('ok')
+  })
+
+  it('直前の雨：暗くなる前12時間に1mm以上か24時間で10mm以上で注意、暗くなる時も雨・夜間0.5mm以上で警戒', () => {
+    const base = { totalMm: 0, recentMm: 0, hoursSinceRain: null, rainingAtDark: false, nightMm: 0 }
+    expect(rainLevel(base)).toBe('ok')
+    expect(rainLevel({ ...base, totalMm: 5, recentMm: 0.5 })).toBe('ok') // 12時間より前の少しの雨だけ
+    expect(rainLevel({ ...base, totalMm: 10, recentMm: 0 })).toBe('caution') // 24時間で10mm以上の大雨
+    expect(rainLevel({ ...base, recentMm: 1 })).toBe('caution')
+    expect(rainLevel({ ...base, rainingAtDark: true })).toBe('danger')
+    expect(rainLevel({ ...base, nightMm: 0.5 })).toBe('danger')
+    expect(rainLevel(null)).toBe('ok')
   })
 })

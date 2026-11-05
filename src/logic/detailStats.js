@@ -11,22 +11,62 @@ function localDateString(date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(date)
 }
 
-/**
- * 「前日〜当日」の降水量合計を求める（地面のぬかるみ判断用）。
- * nightDateNoonはD日（夜の始まる日）の正午ごろのDate。
- */
-export function sumPrecipitation(hourly, nightDateNoon) {
-  const todayStr = localDateString(nightDateNoon)
-  const yesterdayStr = localDateString(new Date(nightDateNoon.getTime() - 24 * 60 * 60 * 1000))
+const HOUR_MS = 60 * 60 * 1000
+// これ以上なら「雨が降った」とみなす1時間の雨の量（mm）
+const RAIN_MIN_MM = 0.1
 
-  let sum = 0
+/**
+ * 「直前の雨」：暗くなる時刻（天文薄明の終わり。無ければ日没）の前に、どれだけ降って、いつ止んだか。
+ * 地面がどれだけ湿っているか、霧や靄が出やすいかの目安にする。
+ * Open-Meteo の雨の量は「その時刻までの1時間に降った量」（例：14:00 の値＝13:00〜14:00 の雨）。
+ * @returns {{
+ *   totalMm: number,          暗くなる前 rainLookbackHours 時間の合計
+ *   recentMm: number,         暗くなる前 rainRecentHours 時間の合計
+ *   hoursSinceRain: number|null, 最後に降ってから暗くなるまでの時間（降っていなければ null）
+ *   rainingAtDark: boolean,   暗くなる時刻を含む1時間にも降っている
+ *   nightMm: number,          暗い時間に入ってから（暗くなる時刻〜天文薄明の始まり）の合計
+ * } | null}
+ */
+export function recentRain(hourly, info) {
+  const darkStart = info.duskEnd ?? info.sunset
+  const darkEnd = info.dawnStart ?? info.sunrise
+  if (!hourly?.time || !darkStart || !darkEnd) return null
+  const start = darkStart.getTime()
+  const end = darkEnd.getTime()
+
+  let totalMm = 0
+  let recentMm = 0
+  let nightMm = 0
+  let lastRainEnd = null
+  let rainingAtDark = false
   hourly.time.forEach((t, i) => {
-    const dateStr = t.slice(0, 10)
-    if (dateStr === todayStr || dateStr === yesterdayStr) {
-      sum += hourly.precipitation[i] ?? 0
+    const mm = hourly.precipitation?.[i]
+    if (mm == null) return
+    const hourEnd = parseLocalTime(t).getTime() // この1時間の終わり
+    const hourStart = hourEnd - HOUR_MS
+    if (hourEnd <= start) {
+      // 暗くなる前
+      if (hourEnd > start - config.rainLookbackHours * HOUR_MS) totalMm += mm
+      if (hourEnd > start - config.rainRecentHours * HOUR_MS) recentMm += mm
+      if (mm >= RAIN_MIN_MM && hourEnd > start - config.rainLookbackHours * HOUR_MS) lastRainEnd = hourEnd
+    } else if (hourStart < start) {
+      // 暗くなる時刻を含む1時間
+      totalMm += mm
+      recentMm += mm
+      if (mm >= RAIN_MIN_MM) rainingAtDark = true
+    } else if (hourStart < end) {
+      // 暗い時間に入ってから
+      nightMm += mm
     }
   })
-  return sum
+
+  return {
+    totalMm,
+    recentMm,
+    hoursSinceRain: lastRainEnd === null ? null : (start - lastRainEnd) / HOUR_MS,
+    rainingAtDark,
+    nightMm,
+  }
 }
 
 /** 夜間（sunset〜sunrise）の最低気温を求める。該当データが無ければnull。 */

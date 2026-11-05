@@ -38,6 +38,18 @@ export function dewLevel(spread) {
   return 'ok'
 }
 
+/**
+ * 直前の雨：暗くなる時にまだ降っている、または夜間にも降る予報なら警戒。
+ * 暗くなる前の12時間以内に1mm以上、または24時間で10mm以上降っていたら注意
+ * （地面が濡れていて、霧や靄が出やすい）
+ */
+export function rainLevel(rain) {
+  if (!rain) return 'ok'
+  if (rain.rainingAtDark || rain.nightMm >= config.rainNightMinMm) return 'danger'
+  if (rain.recentMm >= config.rainWetMinMm || rain.totalMm >= config.rainHeavyMm) return 'caution'
+  return 'ok'
+}
+
 /** 周辺5kmの低層雲（%）：5を超えたら注意、30を超えたら警戒 */
 export function lowCloudLevel(percent) {
   if (percent == null) return 'ok'

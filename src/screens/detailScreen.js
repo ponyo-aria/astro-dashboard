@@ -23,10 +23,11 @@ import {
   gustLevel,
   dewLevel,
   lowCloudLevel,
+  rainLevel,
 } from '../logic/levels.js'
 import { matrixSlots, cloudAt, windAt } from '../logic/nightMatrix.js'
 import {
-  sumPrecipitation,
+  recentRain,
   minNightTemperature,
   dewPointRisk,
   nightWindInfo,
@@ -380,12 +381,7 @@ export function renderDetailScreen(
   function renderInfoTiles(hourly, ecmwfHourly, info, forecast, mainModelKey) {
     const tiles = el('section', 'detail-tiles')
 
-    // 並び順：最低気温・風・結露リスク／低層雲・雲の流れ・降水量（現地での優先度順）
-    const minTemp = minNightTemperature(hourly, info.sunset, info.sunrise)
-    tiles.appendChild(
-      tile('最低気温', minTemp === null ? '―' : `${minTemp.toFixed(1)}℃`, { sub: '夜間' })
-    )
-
+    // 並び順：1段目＝風と雲（風・周辺5km低層雲・雲の流れ）、2段目＝温度と水分（最低気温・直前の雨・結露リスク）
     // 風：平均の風速は判定に使うモデル（MSM。届かない夜はECMWF）、最大瞬間風速はECMWFの9km版
     // （MSMは瞬間風速を出さないため。9km版がまだ無い古い保存データのときは、ECMWF（約25km）で代わりに出す）
     // 平均・瞬間それぞれで段階を決め、厳しい方をカードの段階にする
@@ -407,15 +403,6 @@ export function renderDetailScreen(
               : [],
         }
       )
-    )
-
-    // 結露：気温と露点の差（いちばん小さい時間）を大きく出す。差が小さいほど結露しやすい
-    const dew = dewPointRisk(hourly, info.sunset, info.sunrise)
-    tiles.appendChild(
-      tile('結露リスク', dew ? `${dew.minDiff.toFixed(1)}℃` : '―', {
-        level: dewLevel(dew?.minDiff),
-        sub: '気温と露点の差',
-      })
     )
 
     // 周辺5kmの低層雲：暗い時間のうち、いちばん多かった時間の値（%）。方角どおりに十字に並べる
@@ -456,8 +443,44 @@ export function renderDetailScreen(
     // （判定に使わない参考情報だが、その旨はどの表示でも同じなので書かない：2026-11-05 オーナー指示）
     tiles.appendChild(tile('雲の流れ', dirValue, { sub: '上空約1.5kmの風' }))
 
-    const precip = sumPrecipitation(hourly, currentNight())
-    tiles.appendChild(tile('降水量', `${precip.toFixed(1)}mm`, { sub: '前日〜当日の合計' }))
+    const minTemp = minNightTemperature(hourly, info.sunset, info.sunrise)
+    tiles.appendChild(
+      tile('最低気温', minTemp === null ? '―' : `${minTemp.toFixed(1)}℃`, { sub: '夜間' })
+    )
+
+    // 直前の雨：暗くなる前にどれだけ降って、いつ止んだか（地面の湿り・霧や靄の出やすさの目安）
+    const rain = recentRain(hourly, info)
+    const rainLv = rainLevel(rain)
+    let rainSub = []
+    if (rain) {
+      let timing
+      if (rain.rainingAtDark) timing = '暗くなる時も雨'
+      else if (rain.hoursSinceRain === null) timing = `${config.rainLookbackHours}時間降雨なし`
+      else if (rain.hoursSinceRain < 1) timing = '止んだばかり'
+      else timing = `止んで${Math.floor(rain.hoursSinceRain)}時間`
+      rainSub = [{ text: timing, className: 'is-oneline' }]
+      if (rain.nightMm >= 0.1) {
+        // 警戒の量（rainNightMinMm）に届いたときだけ赤くする
+        const nightLv = rain.nightMm >= config.rainNightMinMm ? 'danger' : 'ok'
+        rainSub.push({ text: `夜間も${rain.nightMm.toFixed(1)}mm`, className: `is-oneline text-${nightLv}` })
+      }
+    }
+    tiles.appendChild(
+      tile(
+        '直前の雨',
+        !rain ? '―' : rain.totalMm >= 0.1 ? `${rain.totalMm.toFixed(1)}mm` : 'なし',
+        { level: rainLv, sub: rainSub }
+      )
+    )
+
+    // 結露：気温と露点の差（いちばん小さい時間）を大きく出す。差が小さいほど結露しやすい
+    const dew = dewPointRisk(hourly, info.sunset, info.sunrise)
+    tiles.appendChild(
+      tile('結露リスク', dew ? `${dew.minDiff.toFixed(1)}℃` : '―', {
+        level: dewLevel(dew?.minDiff),
+        sub: '気温と露点の差',
+      })
+    )
 
     return tiles
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  sumPrecipitation,
+  recentRain,
   minNightTemperature,
   dewPointRisk,
   nightWindInfo,
@@ -23,14 +23,51 @@ function makeHourly(times, values) {
   }
 }
 
-describe('sumPrecipitation', () => {
-  it('前日〜当日ぶんの降水量だけを合計する（翌日・2日前は含めない）', () => {
-    const nightDateNoon = new Date('2026-11-04T03:00:00Z') // 2026-11-04 12:00 JST
-    const hourly = makeHourly(
-      ['2026-11-02T23:00', '2026-11-03T06:00', '2026-11-04T20:00', '2026-11-05T02:00'],
-      { precipitation: [100, 2, 3, 100] }
+describe('recentRain（直前の雨）', () => {
+  // 暗くなる時刻 18:00、明るくなる時刻 翌05:00（日本時間）
+  const info = {
+    duskEnd: new Date('2026-11-04T09:00:00Z'),
+    dawnStart: new Date('2026-11-04T20:00:00Z'),
+  }
+  // 雨の量は「その時刻までの1時間に降った量」
+  const rainAt = (pairs) =>
+    makeHourly(
+      pairs.map(([t]) => t),
+      { precipitation: pairs.map(([, mm]) => mm) }
     )
-    expect(sumPrecipitation(hourly, nightDateNoon)).toBe(5)
+
+  it('暗くなる前24時間の合計と、止んでからの時間を求める（24時間より前の雨は数えない）', () => {
+    const r = recentRain(
+      rainAt([
+        ['2026-11-03T10:00', 50], // 24時間より前
+        ['2026-11-04T09:00', 2],
+        ['2026-11-04T14:00', 1.5], // 最後の雨（13〜14時）
+        ['2026-11-04T17:00', 0],
+      ]),
+      info
+    )
+    expect(r.totalMm).toBeCloseTo(3.5, 5)
+    expect(r.hoursSinceRain).toBe(4) // 14時に止んで、暗くなる18時まで4時間
+    expect(r.rainingAtDark).toBe(false)
+    expect(r.nightMm).toBe(0)
+  })
+
+  it('暗くなる時刻を含む1時間に降っていれば「暗くなる時も雨」、暗い時間の雨は夜間として別に数える', () => {
+    const r = recentRain(
+      rainAt([
+        ['2026-11-04T18:30', 0.4], // 17:30〜18:30（暗くなる18時をまたぐ）
+        ['2026-11-04T22:00', 1.2], // 夜間
+      ]),
+      info
+    )
+    expect(r.rainingAtDark).toBe(true)
+    expect(r.nightMm).toBeCloseTo(1.2, 5)
+  })
+
+  it('24時間降っていなければ、止んでからの時間は null', () => {
+    const r = recentRain(rainAt([['2026-11-04T12:00', 0]]), info)
+    expect(r.totalMm).toBe(0)
+    expect(r.hoursSinceRain).toBeNull()
   })
 })
 
