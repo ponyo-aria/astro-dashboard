@@ -10,16 +10,21 @@
 /* global self, caches, fetch */
 
 // 保存するファイルの一覧（index.html・JS・CSS・アイコンなど）
-const PRECACHE_FILES = ["apple-touch-icon-180x180.png","assets/index-BKncoWKt.css","assets/index-gkIVtZfn.js","favicon.ico","icon.svg","index.html","manifest.webmanifest","maskable-icon-512x512.png","pwa-192x192.png","pwa-512x512.png","pwa-64x64.png"]
+const PRECACHE_FILES = ["apple-touch-icon-180x180.png","assets/index-BXP5HOOj.css","assets/index-exPVayuP.js","favicon.ico","icon.svg","index.html","manifest.webmanifest","maskable-icon-512x512.png","pwa-192x192.png","pwa-512x512.png","pwa-64x64.png"]
 // 中身が変わるたびに変わる番号。新しい版を公開すると、保存場所ごと入れ替わる
-const CACHE_NAME = 'astro-dashboard-' + "1be3adf45483"
+const CACHE_NAME = 'astro-dashboard-' + "ff76b05ba9f6"
 
 // インストール時：アプリ本体のファイルをまとめて保存する
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_FILES))
+      // cache: 'reload' ＝ ブラウザが覚えている古いファイルを使わず、必ずサーバーから取り直す。
+      // （GitHub Pages は「10分間は使い回してよい」という設定で配るため、これが無いと
+      //   公開から10分以内に開いたとき、新しい版のつもりで古いファイルを保存してしまう）
+      .then((cache) =>
+        cache.addAll(PRECACHE_FILES.map((file) => new Request(file, { cache: 'reload' })))
+      )
       // 新しい版は待たずにすぐ使い始める（次に開いたときに新しい版になる）
       .then(() => self.skipWaiting())
   )
