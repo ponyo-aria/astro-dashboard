@@ -135,4 +135,26 @@ describe('トップ画面', () => {
     // 通信に失敗しても、基準地点ブロック（7）＋各地点・7夜ぶんの判定表示（3×7）は出る
     expect(container.querySelectorAll('.nights-row')).toHaveLength(28)
   })
+
+  it('圏外のときは通信せず、保存済みの予報を「（オフライン）」付きで表示する（10分以内に取得済みでも）', async () => {
+    // 5分前に取得した予報が保存されている状態
+    localStorage.setItem(
+      'astro-dashboard.forecastCache.v1',
+      JSON.stringify({
+        fetchedAt: Date.now() - 5 * 60 * 1000,
+        results: { msm: [], ecmwf: [] },
+        modelMeta: {},
+      })
+    )
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('navigator', { onLine: false })
+
+    const container = document.createElement('div')
+    await renderTopScreen(container, locations)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('時点のデータ（オフライン）')
+    expect(container.textContent).toContain('保存済みの予報を表示しています')
+  })
 })

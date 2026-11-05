@@ -59,6 +59,11 @@ function clearHoursOf(judgment) {
   return typeof hours === 'number' ? `${hours.toFixed(1)}h` : '―'
 }
 
+// 端末が圏外かどうか（ブラウザが「オフライン」と判断しているとき true）
+function isOffline() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+}
+
 function pickDefaultReference(locations) {
   return locations.find((loc) => loc.name === DEFAULT_REFERENCE_NAME) ?? locations[0]
 }
@@ -99,6 +104,12 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
 
   async function loadData(force) {
     if (locations.length === 0) {
+      render()
+      return
+    }
+    // 圏外（機内モードなど）と分かっているときは通信せず、保存済みの予報を「オフライン」表示で出す
+    if (isOffline()) {
+      state.errorMessage = 'オフラインのため取得できませんでした'
       render()
       return
     }

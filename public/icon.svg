@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- アプリのアイコン（夜空に三日月と星）。PNG版はここから自動生成する -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1026"/>
+      <stop offset="1" stop-color="#1c2a5a"/>
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="292" cy="212" r="98" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <!-- 三日月：円から少しずらした円をくり抜く -->
+  <circle cx="236" cy="252" r="110" fill="#f6d77a" mask="url(#crescent)"/>
+  <!-- 星 -->
+  <g fill="#ffffff">
+    <circle cx="352" cy="318" r="9"/>
+    <circle cx="318" cy="380" r="5"/>
+    <circle cx="160" cy="150" r="5"/>
+    <circle cx="380" cy="160" r="6"/>
+  </g>
+  <!-- 山の稜線（撮影地のイメージ） -->
+  <path d="M0 420 L120 330 L190 380 L290 300 L400 390 L512 340 L512 512 L0 512 Z" fill="#070a18"/>
+</svg>

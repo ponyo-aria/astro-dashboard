@@ -71,6 +71,16 @@ toggleButton.addEventListener('click', () => {
   toggleButton.textContent = locationsContainer.hidden ? '地点管理を開く' : '地点管理を閉じる'
 })
 
+// 公開版（npm run build で作ったもの）のときだけ、アプリ本体を端末に保存する仕組みを登録する。
+// 開発中（npm run dev）に登録すると古い画面が残って紛らわしいので登録しない。
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      // 登録に失敗してもアプリ自体は普通に使えるので、何もしない
+    })
+  })
+}
+
 // 地点管理画面で地点が変わったら、トップ画面も再計算する
 renderLocationsScreen(locationsContainer, { onChange: refreshTop })
 refreshTop()
