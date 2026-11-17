@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fetchForecast, fetchModelUpdateInfo } from '../src/api/forecast.js'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { fetchForecast, fetchModelUpdateInfo, FetchTimeoutError } from '../src/api/forecast.js'
+import { config } from '../src/config.js'
 
 function makePointResponse(lat, lng) {
   return { latitude: lat, longitude: lng, hourly: { time: ['2026-11-04T00:00'], cloud_cover_low: [10] } }
@@ -39,7 +40,9 @@ describe('fetchForecast', () => {
 
     const url = new URL(requestedUrl)
     // ブラウザが覚えている古い応答を使い回さない
-    expect(fetch.mock.calls[0][1]).toEqual({ cache: 'no-cache' })
+    expect(fetch.mock.calls[0][1].cache).toBe('no-cache')
+    // 待ち時間の上限を過ぎたら打ち切れるよう、打ち切りの合図（signal）を渡している
+    expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
     expect(url.pathname).toBe('/v1/jma')
     expect(url.searchParams.get('models')).toBe('jma_msm')
     // 2地点×5点=10個ぶんの緯度が渡っていること
@@ -147,5 +150,77 @@ describe('fetchModelUpdateInfo', () => {
     const info = await fetchModelUpdateInfo('msm')
     expect(info.initTime).toEqual(new Date(1793782800 * 1000))
     expect(info.updateIntervalSeconds).toBe(10800)
+  })
+})
+
+describe('待ち時間の上限（時間切れ）', () => {
+  // 返事がいつまでも来ない通信の代わり。打ち切りの合図が来たら失敗する（本物のブラウザと同じ動き）
+  function stubHangingFetch() {
+    const fetchMock = vi.fn(
+      (url, { signal }) =>
+        new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('MSMは上限（30秒）を過ぎたら時間切れになり、通信を打ち切る', async () => {
+    const fetchMock = stubHangingFetch()
+    const promise = fetchForecast('msm', [{ id: 'a', lat: 35, lng: 138 }])
+    const result = promise.catch((e) => e)
+
+    await vi.advanceTimersByTimeAsync((config.fetchTimeoutSeconds - 1) * 1000)
+    // 上限の1秒前はまだ待っている
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    const error = await result
+    expect(error).toBeInstanceOf(FetchTimeoutError)
+    expect(error.timedOut).toBe(true)
+    expect(error.seconds).toBe(config.fetchTimeoutSeconds)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true)
+  })
+
+  it('返事は来たが中身の受け取りが終わらないときも、時間切れになる', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: () => new Promise(() => {}) }))
+    )
+    const result = fetchModelUpdateInfo('msm').catch((e) => e)
+    await vi.advanceTimersByTimeAsync(config.fetchTimeoutSeconds * 1000)
+    expect(await result).toBeInstanceOf(FetchTimeoutError)
+  })
+
+  it('参考モデル（GSM）は上限が長く（60秒）、30秒ではまだ待っている', async () => {
+    const fetchMock = stubHangingFetch()
+    const result = fetchForecast('gsm', [{ id: 'a', lat: 35, lng: 138 }]).catch((e) => e)
+
+    await vi.advanceTimersByTimeAsync(config.fetchTimeoutSeconds * 1000)
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(
+      (config.referenceFetchTimeoutSeconds - config.fetchTimeoutSeconds) * 1000
+    )
+    const error = await result
+    expect(error).toBeInstanceOf(FetchTimeoutError)
+    expect(error.seconds).toBe(config.referenceFetchTimeoutSeconds)
+  })
+
+  it('上限より早く届いたときは、ふつうに結果を返す', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => [makePointResponse(35, 138)] }))
+    )
+    const result = await fetchForecast('gsm', [{ id: 'a', lat: 35, lng: 138 }])
+    expect(result[0].center.latitude).toBe(35)
   })
 })

@@ -205,6 +205,34 @@ select {
   vertical-align: middle;
 }
 
+/* 取得中は矢印を回す（押せない間も、薄くせずに回っているのが見えるようにする） */
+.refresh-button.is-loading:disabled {
+  opacity: 1;
+}
+
+.refresh-button.is-loading svg {
+  animation: refresh-spin 1s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 「動きを減らす」設定のスマホでは回さず、ゆっくり点滅させる */
+@media (prefers-reduced-motion: reduce) {
+  .refresh-button.is-loading svg {
+    animation: refresh-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes refresh-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 
 .top-notice {
   margin-top: 8px;

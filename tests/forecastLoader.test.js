@@ -55,6 +55,56 @@ describe('予報の取得と保存', () => {
   })
 })
 
+describe('MSM・ECMWFを先に画面へ渡す', () => {
+  it('参考モデルがまだ届いていなくても、MSM・ECMWFが届いた時点で onMainReady が呼ばれ、保存もされる', async () => {
+    // 参考モデル（GSM・AIFS・瞬間風速用ECMWF 9km版）だけ、合図するまで返事を止めておく
+    let releaseReference
+    const referenceGate = new Promise((resolve) => {
+      releaseReference = resolve
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        const u = String(url)
+        if (u.includes('jma_gsm') || u.includes('ecmwf_aifs025_single') || u.includes('models=ecmwf_ifs&')) {
+          await referenceGate
+        }
+        return { ok: true, json: async () => (u.includes('meta.json') ? meta : Array(5).fill(point)) }
+      })
+    )
+
+    const onMainReady = vi.fn()
+    const done = fetchAndSaveForecast(locations, { onMainReady })
+    await vi.waitFor(() => expect(onMainReady).toHaveBeenCalledTimes(1))
+
+    const mainCache = onMainReady.mock.calls[0][0]
+    expect(mainCache.results.msm).toHaveLength(1)
+    expect(mainCache.results.ecmwf).toHaveLength(1)
+    expect(mainCache.results.gsm).toBeUndefined()
+    // 参考モデルを待っている間に閉じても、MSM・ECMWFは端末に残っている
+    expect(loadForecastCache().results.msm).toHaveLength(1)
+
+    releaseReference()
+    const cache = await done
+    expect(cache.results.gsm).toHaveLength(1)
+    expect(cache.results.ecmwfWind).toHaveLength(1)
+    expect(cache.fetchedAt).toBe(mainCache.fetchedAt)
+    expect(loadForecastCache().results.aifs).toHaveLength(1)
+  })
+
+  it('MSM・ECMWFの取得に失敗したときは、onMainReady は呼ばれない', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      })
+    )
+    const onMainReady = vi.fn()
+    await expect(fetchAndSaveForecast(locations, { onMainReady })).rejects.toThrow()
+    expect(onMainReady).not.toHaveBeenCalled()
+  })
+})
+
 describe('端末に保存できなかったとき', () => {
   it('保存に失敗しても、取得した予報は使える（保存できなかった印が付く）', async () => {
     vi.stubGlobal(

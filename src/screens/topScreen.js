@@ -26,6 +26,13 @@ import { MAIN_MODELS, MODEL_INFO } from '../logic/modelInfo.js'
 import { STATUS_SHORT, STATUS_CAPTION, matrixSlots, cloudAt, windAt, bestStatus } from '../logic/nightMatrix.js'
 import { config } from '../config.js'
 import { moonPhaseSvg } from './moonPhaseIcon.js'
+import {
+  loadingStatusLine,
+  startElapsedTicker,
+  fetchErrorMessage,
+  fallbackBadgeText,
+  setRefreshSpinning,
+} from './loadingIndicator.js'
 import { hourLabelCell, skyCell, cloudCell } from './hourCells.js'
 import {
   WEEKDAY_NAMES,
@@ -89,8 +96,11 @@ export function getReferenceLocation(locations) {
 
 export async function renderTopScreen(container, locations, { onCardClick } = {}) {
   const state = {
-    loading: false,
+    loading: false, // 判定に使う MSM・ECMWF を取得中か（「取得中… ○秒」を出す）
+    loadingReference: false, // MSM・ECMWF は届き、参考モデルの到着を待っているか（更新ボタンだけ回す）
+    loadingStartedAt: null, // 取得を始めた時刻（待っている秒数の表示に使う）
     errorMessage: null,
+    lastError: null, // 取得に失敗したときのエラー（時間切れかどうかの出し分けに使う）
     cache: loadForecastCache(),
     nights: [], // 7夜ぶんの { nightDate, refInfo, entries: [{ location, info, judgment }] }
     locating: false, // 現在地を取得中か
@@ -136,6 +146,7 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
     // 圏外（機内モードなど）と分かっているときは通信せず、保存済みの予報を「オフライン」表示で出す
     if (isOffline()) {
       state.errorMessage = 'オフラインのため取得できませんでした'
+      state.lastError = null
       render()
       return
     }
@@ -145,18 +156,44 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
     }
 
     state.loading = true
+    state.loadingStartedAt = Date.now()
     state.errorMessage = null
+    state.lastError = null
     render()
+    const stopTicker = startElapsedTicker(container, state.loadingStartedAt)
 
+    // MSM・ECMWFが届いたら、参考モデル（ホームでは使わない）を待たずに表示する
+    let mainShown = false
     try {
-      state.cache = await fetchAndSaveForecast(locations)
-    } catch {
-      // 通信失敗（圏外など）。画面は真っ白にせず、保存済みのデータがあればそれを表示する
-      state.errorMessage = '取得できませんでした'
+      const cache = await fetchAndSaveForecast(locations, {
+        onMainReady: (mainCache) => {
+          mainShown = true
+          state.cache = mainCache
+          state.loading = false
+          state.loadingReference = true
+          render()
+        },
+      })
+      state.cache = cache
+    } catch (error) {
+      // 通信失敗（圏外など）や時間切れ。画面は真っ白にせず、保存済みのデータがあればそれを表示する
+      state.errorMessage = fetchErrorMessage(error)
+      state.lastError = error
     } finally {
+      stopTicker()
       state.loading = false
-      render()
+      state.loadingReference = false
+      // 表はもう描いてあるので、上の欄（更新ボタンの回転を止める）だけ描き直す
+      // （表を描き直すと、横にスクロールした位置が戻ってしまうため）
+      if (mainShown && !state.cache?.notSaved) updateHeader()
+      else render()
     }
+  }
+
+  function updateHeader() {
+    const header = container.querySelector(':scope > header.top-header')
+    if (header) header.replaceWith(renderHeader())
+    else render()
   }
 
   // 1行目：アプリ名・取得時刻・赤色モード・更新ボタン
@@ -166,12 +203,16 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
 
     // 右寄せの2行：取得した時刻（＋オフラインの札）／MSMの次の予報が出る時刻の目安
     const status = el('div', 'top-status')
-    let fetchedText = ''
-    if (state.loading) fetchedText = '取得中…'
-    else if (state.cache) fetchedText = `${formatDateTime(state.cache.fetchedAt)} 取得`
-    const fetchedLine = el('span', 'top-status-line', fetchedText)
+    let fetchedLine
+    if (state.loading) {
+      // 「取得中… 12秒」：秒数が増えていれば、止まっていないと分かる
+      fetchedLine = loadingStatusLine(state.loadingStartedAt)
+    } else {
+      const fetchedText = state.cache ? `${formatDateTime(state.cache.fetchedAt)} 取得` : ''
+      fetchedLine = el('span', 'top-status-line', fetchedText)
+    }
     if (state.errorMessage && state.cache && !state.loading) {
-      fetchedLine.appendChild(el('span', 'badge badge-offline', 'オフライン'))
+      fetchedLine.appendChild(el('span', 'badge badge-offline', fallbackBadgeText(state.lastError)))
     }
     status.appendChild(fetchedLine)
 
@@ -202,7 +243,9 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>'
     refreshButton.setAttribute('aria-label', '更新')
     refreshButton.title = '予報を取得し直す'
-    refreshButton.disabled = state.loading
+    refreshButton.disabled = state.loading || state.loadingReference
+    // 取得中（参考モデルを待っている間も）は、矢印を回して動いていることを示す
+    setRefreshSpinning(refreshButton, state.loading || state.loadingReference)
     refreshButton.addEventListener('click', () => loadData(true))
     header.appendChild(refreshButton)
 

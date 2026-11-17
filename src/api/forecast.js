@@ -42,6 +42,52 @@ export const MODELS = {
   },
 }
 
+/** 時間切れ（待ち時間の上限を過ぎた）ときのエラー。画面で「時間切れ」と出し分けるために使う */
+export class FetchTimeoutError extends Error {
+  constructor(seconds) {
+    super(`${seconds}秒待っても応答がありませんでした`)
+    this.name = 'FetchTimeoutError'
+    this.timedOut = true
+    this.seconds = seconds
+  }
+}
+
+/** モデルごとの待ち時間の上限（秒）。参考モデルは後から届けばよいので長め */
+function timeoutSecondsFor(modelInfo) {
+  return modelInfo.reference ? config.referenceFetchTimeoutSeconds : config.fetchTimeoutSeconds
+}
+
+/**
+ * 待ち時間の上限つきで通信し、届いた中身（JSON）を返す。
+ * 返事の受け取りまで含めて seconds 秒を過ぎたら、通信を打ち切って FetchTimeoutError を投げる。
+ * （上限が無いと、相手が応答しないときに「取得中…」のまま止まってしまうため）
+ * cache: 'no-cache' ＝ ブラウザが覚えている古い応答を使い回さず、必ずサーバーに確かめる
+ */
+async function fetchJsonWithTimeout(url, seconds, failMessage) {
+  const controller = new AbortController()
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new FetchTimeoutError(seconds))
+    }, seconds * 1000)
+  })
+  const request = (async () => {
+    const response = await fetch(url, { cache: 'no-cache', signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`${failMessage}（status: ${response.status}）`)
+    }
+    return response.json()
+  })()
+  // 時間切れのあとに通信側が失敗しても、エラーが宙に浮かないようにしておく
+  request.catch(() => {})
+  try {
+    return await Promise.race([request, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const HOURLY_VARS = [
   'cloud_cover_low',
   'cloud_cover_mid',
@@ -92,12 +138,7 @@ export async function fetchForecast(modelKey, locations) {
   url.searchParams.set('past_days', '1')
   url.searchParams.set('timezone', 'Asia/Tokyo')
 
-  // cache: 'no-cache' ＝ ブラウザが覚えている古い応答を使い回さず、必ずサーバーに確かめる
-  const response = await fetch(url, { cache: 'no-cache' })
-  if (!response.ok) {
-    throw new Error(`予報の取得に失敗しました（status: ${response.status}）`)
-  }
-  const body = await response.json()
+  const body = await fetchJsonWithTimeout(url, timeoutSecondsFor(modelInfo), '予報の取得に失敗しました')
   // 1地点だけ問い合わせたときは、配列ではなく1つだけで返ってくる
   const data = Array.isArray(body) ? body : [body]
 
@@ -131,14 +172,11 @@ export async function fetchModelUpdateInfo(modelKey) {
   }
   // 更新情報（meta.json）は「いつまで使い回してよいか」の指示が無いため、ブラウザが独自の判断で
   // 20分前後使い回すことがある。新しい予報が出たのに古い更新時刻のまま、とならないよう必ず確かめる
-  const response = await fetch(
+  const data = await fetchJsonWithTimeout(
     `https://api.open-meteo.com/data/${modelInfo.modelParam}/static/meta.json`,
-    { cache: 'no-cache' }
+    timeoutSecondsFor(modelInfo),
+    '更新時刻の取得に失敗しました'
   )
-  if (!response.ok) {
-    throw new Error(`更新時刻の取得に失敗しました（status: ${response.status}）`)
-  }
-  const data = await response.json()
   return {
     initTime: new Date(data.last_run_initialisation_time * 1000),
     availableTime: new Date(data.last_run_availability_time * 1000),

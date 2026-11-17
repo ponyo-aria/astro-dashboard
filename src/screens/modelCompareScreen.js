@@ -21,6 +21,13 @@ import { STATUS_SHORT, STATUS_CAPTION } from '../logic/nightMatrix.js'
 import { nextModelUpdate } from '../logic/modelUpdate.js'
 import { config } from '../config.js'
 import { upcomingNightDates } from '../logic/nightDates.js'
+import {
+  loadingStatusLine,
+  startElapsedTicker,
+  fetchErrorMessage,
+  fallbackBadgeText,
+  setRefreshSpinning,
+} from './loadingIndicator.js'
 import { getReferenceLocation } from './topScreen.js'
 import {
   WEEKDAY_NAMES,
@@ -37,25 +44,49 @@ import {
  * onOpenDetail(location, nightDate, { nightDates, model })：行が押されたときに呼ばれる（詳細を開く）
  */
 export function renderModelCompareScreen(container, locations, { onUpdated, onOpenDetail } = {}) {
-  const state = { loading: false, errorMessage: null, cache: loadForecastCache() }
+  const state = {
+    loading: false, // 判定に使う MSM・ECMWF を取得中か（「取得中… ○秒」を出す）
+    loadingReference: false, // MSM・ECMWF は届き、参考モデル（GSM・AIFS）の到着を待っているか
+    loadingStartedAt: null, // 取得を始めた時刻（待っている秒数の表示に使う）
+    errorMessage: null,
+    lastError: null, // 取得に失敗したときのエラー（時間切れかどうかの出し分けに使う）
+    cache: loadForecastCache(),
+  }
 
   async function refresh() {
     if (locations.length === 0) return
     if (isOffline()) {
       state.errorMessage = 'オフラインのため取得できませんでした'
+      state.lastError = null
       render()
       return
     }
     state.loading = true
+    state.loadingStartedAt = Date.now()
     state.errorMessage = null
+    state.lastError = null
     render()
+    const stopTicker = startElapsedTicker(container, state.loadingStartedAt)
     try {
-      state.cache = await fetchAndSaveForecast(locations)
+      state.cache = await fetchAndSaveForecast(locations, {
+        // MSM・ECMWFが届いたら、参考モデルを待たずに表を出す（参考モデルのマスは「…」）
+        onMainReady: (mainCache) => {
+          state.cache = mainCache
+          state.loading = false
+          state.loadingReference = true
+          render()
+          onUpdated?.()
+        },
+      })
       onUpdated?.()
-    } catch {
-      state.errorMessage = '取得できませんでした'
+    } catch (error) {
+      // 通信失敗（圏外など）や時間切れ。保存済みの予報があればそれを表示する
+      state.errorMessage = fetchErrorMessage(error)
+      state.lastError = error
     } finally {
+      stopTicker()
       state.loading = false
+      state.loadingReference = false
       render()
     }
   }
@@ -66,12 +97,15 @@ export function renderModelCompareScreen(container, locations, { onUpdated, onOp
     header.appendChild(el('h1', 'top-title', 'モデル比較'))
 
     const status = el('div', 'top-status')
-    let text = ''
-    if (state.loading) text = '取得中…'
-    else if (state.cache) text = `${formatDateTime(state.cache.fetchedAt)} 取得`
-    const line = el('span', 'top-status-line', text)
+    let line
+    if (state.loading) {
+      // 「取得中… 12秒」：秒数が増えていれば、止まっていないと分かる
+      line = loadingStatusLine(state.loadingStartedAt)
+    } else {
+      line = el('span', 'top-status-line', state.cache ? `${formatDateTime(state.cache.fetchedAt)} 取得` : '')
+    }
     if (state.errorMessage && state.cache && !state.loading) {
-      line.appendChild(el('span', 'badge badge-offline', 'オフライン'))
+      line.appendChild(el('span', 'badge badge-offline', fallbackBadgeText(state.lastError)))
     }
     status.appendChild(line)
     header.appendChild(status)
@@ -82,7 +116,9 @@ export function renderModelCompareScreen(container, locations, { onUpdated, onOp
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>'
     refreshButton.setAttribute('aria-label', '更新')
     refreshButton.title = '予報を取得し直す'
-    refreshButton.disabled = state.loading || locations.length === 0
+    refreshButton.disabled = state.loading || state.loadingReference || locations.length === 0
+    // 取得中（参考モデルを待っている間も）は、矢印を回して動いていることを示す
+    setRefreshSpinning(refreshButton, state.loading || state.loadingReference)
     refreshButton.addEventListener('click', refresh)
     header.appendChild(refreshButton)
     return header
@@ -161,8 +197,11 @@ export function renderModelCompareScreen(container, locations, { onUpdated, onOp
     if (modelKey === REFERENCE_MODELS[0]) td.classList.add('is-ref-start') // 参考の列の始まりに区切り線
     if (!result?.available) {
       td.classList.add('is-out')
-      // 予報そのものが無い（取得できなかった）ときは「―」、夜の途中で予報が切れているときは「範囲外」
-      td.appendChild(el('span', 'compare-out', result ? '範囲外' : '―'))
+      // 予報そのものが無い（取得できなかった）ときは「―」、夜の途中で予報が切れているときは「範囲外」。
+      // 参考モデルの到着を待っている間は「…」（届かなかった「―」と見分けるため）
+      let text = result ? '範囲外' : '―'
+      if (!result && isReferenceModel(modelKey) && state.loadingReference) text = '…'
+      td.appendChild(el('span', 'compare-out', text))
       return td
     }
     td.classList.add(result.isGo ? 'is-go' : 'is-no-go')
