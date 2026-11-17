@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderModelCompareScreen } from '../src/screens/modelCompareScreen.js'
 import { saveForecastCache } from '../src/storage/forecastCache.js'
 
@@ -79,6 +79,14 @@ function stubFetch() {
 beforeEach(() => {
   localStorage.clear()
   vi.unstubAllGlobals()
+  // 予報データ（11/4〜）に合わせて、「いま」を 2026-11-05 15:00（日本時間）に固定する。
+  // 固定しないと、テストを動かす日によって予報の範囲から外れて失敗してしまう（時計の日付だけ差し替える）
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-05T15:00:00+09:00'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('モデル比較画面', () => {

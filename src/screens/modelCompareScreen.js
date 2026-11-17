@@ -20,6 +20,8 @@ import { ALL_MODELS, REFERENCE_MODELS, MODEL_INFO, isReferenceModel } from '../l
 import { STATUS_SHORT, STATUS_CAPTION } from '../logic/nightMatrix.js'
 import { nextModelUpdate } from '../logic/modelUpdate.js'
 import { config } from '../config.js'
+import { upcomingNightDates } from '../logic/nightDates.js'
+import { getReferenceLocation } from './topScreen.js'
 import {
   WEEKDAY_NAMES,
   WEEKDAY_CLASSES,
@@ -29,24 +31,6 @@ import {
   formatHours,
   el,
 } from './format.js'
-
-const TIME_ZONE = 'Asia/Tokyo'
-
-function addDays(date, days) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
-
-function noonOf(date) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
-  return new Date(`${parts}T12:00:00+09:00`)
-}
 
 /**
  * onUpdated：更新ボタンで予報を取り直したときに呼ばれる（ホーム画面にも反映するため）
@@ -298,8 +282,8 @@ export function renderModelCompareScreen(container, locations, { onUpdated, onOp
 
     container.appendChild(renderModelInfo())
 
-    const today = new Date()
-    const nightDates = Array.from({ length: NIGHT_COUNT }, (_, i) => noonOf(addDays(today, i)))
+    // ホームと同じ夜の一覧（0時〜日の出の間は前日の夜から数える。基準地点の日の出で判断）
+    const nightDates = upcomingNightDates(getReferenceLocation(locations), NIGHT_COUNT)
     locations.forEach((location) => container.appendChild(renderLocationTable(location, nightDates)))
   }
 

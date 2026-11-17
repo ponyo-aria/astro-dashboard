@@ -14,6 +14,7 @@ import {
 } from '../api/currentLocation.js'
 import { loadForecastCache, isCacheFresh } from '../storage/forecastCache.js'
 import { createObserver, computeNightInfo } from '../logic/astronomy.js'
+import { upcomingNightDates } from '../logic/nightDates.js'
 import {
   NIGHT_COUNT,
   STATUS_CLASSES,
@@ -39,7 +40,6 @@ import {
 } from './format.js'
 import { nextModelUpdate } from '../logic/modelUpdate.js'
 
-const TIME_ZONE = 'Asia/Tokyo'
 const REFERENCE_LOCATION_KEY = 'astro-dashboard.selectedLocationId.v1'
 const DEFAULT_REFERENCE_NAME = '八ヶ岳ふれあい公園' // 野辺山
 
@@ -56,28 +56,13 @@ export function selectNight(index) {
   redrawTop?.()
 }
 
-/** 今日から7夜ぶんの日付（各夜の正午）と、ホームで選んでいる夜（下のボタンの「詳細」で使う） */
-export function getNightSelection() {
-  const today = new Date()
-  const nightDates = Array.from({ length: NIGHT_COUNT }, (_, i) => noonOf(addDays(today, i)))
+/**
+ * 今夜から7夜ぶんの日付（各夜の正午）と、ホームで選んでいる夜（下のボタンの「詳細」で使う）。
+ * 0時〜日の出の間は、まだ前日の夜が続いているので前日の夜から数える（基準地点の日の出で判断）
+ */
+export function getNightSelection(locations = []) {
+  const nightDates = upcomingNightDates(getReferenceLocation(locations), NIGHT_COUNT)
   return { nightDates, index: Math.min(selectedNightIndex, nightDates.length - 1) }
-}
-
-function addDays(date, days) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
-
-// 「D日の夜」の探索の起点として、D日の正午（JST）を作る
-function noonOf(date) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
-  return new Date(`${parts}T12:00:00+09:00`)
 }
 
 function pickDefaultReference(locations) {
@@ -127,14 +112,14 @@ export async function renderTopScreen(container, locations, { onCardClick } = {}
   // 7夜×全地点の判定をまとめて計算しておく（タブを切り替えるたびに計算し直さないため）
   // 基準地点（現在地のこともある）の暗い時間・月などは、地点ごとの判定とは別に計算する
   function computeAll(referenceLocation) {
-    const today = new Date()
+    // 0時〜日の出の間は前日の夜から数える（基準地点の日の出で判断）
+    const nightDates = upcomingNightDates(referenceLocation, NIGHT_COUNT)
     const refObserver = createObserver(
       referenceLocation.lat,
       referenceLocation.lng,
       referenceLocation.elevation ?? 0
     )
-    state.nights = Array.from({ length: NIGHT_COUNT }, (_, i) => {
-      const nightDate = noonOf(addDays(today, i))
+    state.nights = nightDates.map((nightDate) => {
       const entries = locations.map((location) => ({
         location,
         ...computeNightJudgment(location, nightDate, state.cache),

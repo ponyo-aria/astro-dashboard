@@ -176,7 +176,7 @@ let lastDetail = null // 最後に開いた詳細（下のボタンの「詳細�
  */
 function defaultDetail() {
   const locations = loadLocations()
-  const { nightDates, index } = getNightSelection()
+  const { nightDates, index } = getNightSelection(locations)
   const location =
     (lastDetail && locations.find((loc) => loc.id === lastDetail.location.id)) ?? locations[0]
   const nightDate = lastDetail?.nightDate ?? nightDates[index]
